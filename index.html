@@ -1,0 +1,43 @@
+<!DOCTYPE html><head>
+<meta charset='utf-8'>
+<title>SP13KTRA</title>
+<meta name=apple-mobile-web-app-capable content=yes>
+<meta name=mobile-web-app-capable content=yes>
+<link rel=icon type=image/png href=favicon.png?231>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<meta name="twitter:title"       content="SP13KTRA">
+<meta property="og:title"        content="SP13KTRA">
+<meta name="description"         content="An anti-gravity grand prix in 13 kilobytes — race the spectrum.">
+<meta name="twitter:description" content="An anti-gravity grand prix in 13 kilobytes — race the spectrum.">
+<meta property="og:description"  content="An anti-gravity grand prix in 13 kilobytes — race the spectrum.">
+<meta name="keywords"            content="Racing, Anti-gravity, Arcade, js13kGames">
+<meta name="twitter:creator"     content="@KilledByAPixel">
+<meta name="twitter:card"        content="summary">
+
+<style>body{background:#000;margin:0}canvas{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}</style>
+</head><body>
+<script>
+onerror=(event, source, lineno, colno, error)=>
+{
+    document.body.style.backgroundColor = '#222';
+    document.body.innerHTML = `<pre style="color:red;font-size:50px;">` + 
+        `${event}\n${source}\nLn ${lineno}, Col ${colno}`; 
+}
+</script>
+<script src=code/debug.js?231></script>
+<script src=code/utilities.js?231></script>
+<script src=code/webgl.js?231></script>
+<script src=code/draw.js?231></script>
+<script src=code/scene.js?231></script>
+<script src=code/track.js?231></script>
+<script src=code/skeleton.js?231></script>
+<script src=code/levels.js?231></script>
+<script src=code/trackGen.js?231></script>
+<script src=code/input.js?231></script>
+<script src=code/audio.js?231></script>
+<script src=code/sounds.js?231></script>
+<script src=code/vehicle.js?231></script>
+<script src=code/hud.js?231></script>
+<script src=code/game.js?231></script>
+<script src=code/main.js?231></script>
