@@ -12,7 +12,7 @@ decision. Built for js13kGames 2026 by Frank Force: the whole game, worlds and a
 fits in a ZIP smaller than the screenshot below. The name is SPECTRA with the 13K
 inside it, and on the title screen the 13K is the only thing in rainbow.
 
-![SP13KTRA](screenshot.png)
+![SP13KTRA](cover.png)
 
 **Play:** open `index.html`. Keyboard only. No downloads, no server, no waiting.
 
