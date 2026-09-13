@@ -24,7 +24,7 @@
 const debug = 1;
 let enhancedMode = 1; // the enhanced build: gamepad, WASD, aspect clamp (const 0 in releaseJS13K.js)
 let enableAsserts = 1;
-let devMode = 0; // Home toggles it, F and T turn it on; unlocks the keys marked * in the legend. Saved in localStorage.SP13KDEV (devSet), so a reload stays in dev mode
+let devMode = 0; // the dev() console command toggles it (the Home key until 2026-09-13); every dev key needs it, so a visitor to the public page plays the plain game. Saved in localStorage.SP13KDEV (devSet), so a reload stays in dev mode
 let topDownMode = 0, topDownZoom = 1, topDownPan; // T: an orthographic map view straight down over the loop (glPreRender, updateCamera); the wheel zooms, WASD pans
 let downloadLink, debugMesh, debugCapture, debugCanvas;
 
@@ -73,6 +73,7 @@ quickStart = localStorage.SP13KQUICK|0; // the quick() console command, remember
 // dev CONSOLE COMMANDS (words in the devtools console instead of number keys); debugInit
 // lists them at startup. Each is a plain global function
 const devCommands = {
+    dev: 'dev mode on/off, remembered across reloads: every dev key ([ ] N F T + - and the rest) works only in it',
     quick: 'quick start on/off, remembered across reloads (reloads now): straight into the race, no title or countdown',
     menu: 'menu start on/off, remembered across reloads (reloads now): the page opens on the menu',
     unlock: 'unlock every circuit (a last place on each)',
@@ -81,6 +82,7 @@ const devCommands = {
     regions: 'show the UI click regions (the menu rows) on/off',
 };
 let showRegions = 0;
+function dev() { devSet(!devMode); return 'dev mode ' + (devMode ? 'on: the dev keys work' : 'off'); }
 function regions() { showRegions = !showRegions; return 'regions ' + (showRegions ? 'on' : 'off'); }
 
 // the click regions, as game.js tests them (hud.js calls this under debug && showRegions)
@@ -193,16 +195,16 @@ function debugInit()
         devSet(1); freeCamMode = 1;
     }
     console.log(
-`SP13KTRA dev keys (debug build only; * needs dev mode)
-  Home   dev mode on/off (remembered)        M  music on/off
+`SP13KTRA dev keys (debug build only, and only in dev mode: type dev() to turn it on; dev mode is ${devMode ? 'ON' : 'off'})
+  M      music on/off (every build, no dev mode needed)
   [ ]    previous / next circuit: restarts the race there (title or mid-race)
   R      in race: restart
   N      skip a quarter lap, gates counted (poisons the run: no placing recorded)
-  F      free cam from play (WASD/QE, Shift = fast, mouse look; implies dev mode) - also G in dev mode
-  T      top-down map view of the whole circuit (wheel zooms, WASD pans, [ ] browse; implies dev mode)
-  * 1 2  back / forward a quarter lap     * 3 4  hold: z -1000 / +1000 per frame
-  * 5    map      * 0  save a screenshot
-  * Q    autodrive (testDrive)     * V  spawn a racer     * U  win sound     * B  music on/off
+  F G    free cam from play (WASD/QE, Shift = fast, mouse look)
+  T      top-down map view of the whole circuit (wheel zooms, WASD pans, [ ] browse)
+  1 2    back / forward a quarter lap       3 4  hold: z -1000 / +1000 per frame
+  5      map      0  save a screenshot
+  Q      autodrive (testDrive)     V  spawn a racer     U  win sound
   + -    hold: time x10 / x.1
 console commands (type one, with the parentheses)
 ${Object.entries(devCommands).map(([k, d]) => '  ' + (k+'()').padEnd(10) + d).join('\n')}
@@ -214,29 +216,24 @@ quick start is ${quickStart ? 'ON' : 'off'}, menu start is ${localStorage.SP13KM
 
 function debugUpdate()
 {
-    // needs no dev mode: [ ] jump to the previous / next circuit and restart the race
-    // there (title or mid-race)
+    // every dev key needs dev mode (the dev() console command): the public page is this build, and a visitor pressing [ ]
+    // opened locked circuits, F or T turned dev mode on (2026-09-13, Frank)
+    if (!devMode)
+        return;
+
+    // [ ] jump to the previous / next circuit and restart the race there (title or mid-race)
     if (keyWasPressed('BracketLeft') || keyWasPressed('BracketRight'))
     {
         currentCircuit = mod(currentCircuit + (keyWasPressed('BracketRight')?1:-1), circuitCount);
         titleScreenMode = 0;
         gameStart();
     }
-    if (keyWasPressed('KeyF')) // free cam straight from play: F implies dev mode for WASD/mouse
-    {
-        devSet(1);
+    if (keyWasPressed('KeyF') || keyWasPressed('KeyG')) // free cam straight from play
         toggleFreeCam();
-    }
-    if (keyWasPressed('KeyT')) // top-down map view, from anywhere: T implies dev mode too; the loop is fitted again each time it opens
-        devSet(1), topDownMode = !topDownMode, topDownZoom = 1, topDownPan = vec3();
+    if (keyWasPressed('KeyT')) // top-down map view, from anywhere; the loop is fitted again each time it opens
+        topDownMode = !topDownMode, topDownZoom = 1, topDownPan = vec3();
     if (topDownMode && !freeCamMode) // pan a fiftieth of the loop radius a frame, scaled by the zoom
         topDownPan = topDownPan.add(vec3(keyIsDown('KeyD')-keyIsDown('KeyA'),0,keyIsDown('KeyW')-keyIsDown('KeyS')).scale(trackMapRadius*.02*topDownZoom));
-    if (!devMode)
-        return;
-
-    // everything below needs dev mode (Home, or F above)
-    if (keyWasPressed('KeyG'))
-        toggleFreeCam();
     if (freeCamMode)
     {
         if (freeCamRestore) // a reload into the bookmark: reseat the player, skip the countdown

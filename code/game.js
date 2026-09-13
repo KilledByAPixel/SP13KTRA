@@ -253,7 +253,7 @@ function gameUpdateInternal()
             raceTime += timeDelta;
             // course-viewing skip: dev only (debug=0 const in the release build, so terser
             // drops this), gates counted, and it poisons the run (debug.js debugSkip)
-            debug && keyWasPressed('KeyN') && debugSkip(1);
+            debug && devMode && keyWasPressed('KeyN') && debugSkip(1);
         }
     }
     updateCars(); // player, rivals, contacts, laps and the finish (vehicle.js); runs on the title too
@@ -326,9 +326,9 @@ function gameUpdate(frameTimeMS=0)
     // update time keeping
     let frameTimeDeltaMS = frameTimeMS - frameTimeLastMS;
     frameTimeLastMS = frameTimeMS;
-    if (debug) // everything inside the gate, so the release ships none of it
+    if (debug && devMode) // everything inside the gate, so the release ships none of it
     {
-        // held + runs time ten times faster, held - a tenth; no dev mode needed
+        // held + runs time ten times faster, held - a tenth, in dev mode (any visitor to the public page could, until 2026-09-13)
         const debugSpeedUp   = keyIsDown('Equal') || keyIsDown('NumpadAdd');      // +
         const debugSpeedDown = keyIsDown('Minus') || keyIsDown('NumpadSubtract'); // -
         frameTimeDeltaMS *= debugSpeedUp ? 10 : debugSpeedDown ? .1 : 1;
@@ -386,8 +386,6 @@ function enhancedModeUpdate()
     if (!titleScreenMode && autoPause && !document.hasFocus())
         paused = focusPaused = 1; // pause when losing focus
 
-    if (debug && keyWasPressed('Home')) // dev mode, on or off, remembered across reloads (debug.js devSet; the enhanced build has no debug.js)
-        devSet(!devMode);
     if (keyWasPressed('KeyR') && !titleScreenMode) // restart
     {
         titleScreenMode = 0;
