@@ -1,41 +1,75 @@
 'use strict';
 
-let cubeMesh, quadMesh, prismMesh, canopyMesh, craftSpecs, glowMeshes;
+///////////////////////////////////////////////////////////////////////////////
+// draw.js: the mesh kit and the shape builders that sit on top of webgl.js.
+//
+// Owns:
+//   - the shared persistent meshes: cubeMesh, prismMesh, canopyMesh, the craft hulls
+//     (craftSpecs[i].mesh, one per colour index) and the two baked glow fans (glowMeshes)
+//   - buildLoft, the ONE shape builder (every hull and kit piece is a loft)
+//   - class Mesh: a static vertex buffer with upload/render/dispose and combine (welding)
+//   - the immediate-mode push that feeds the stream or a bake: pushGlow (the sky bands push
+//     their own corners in track.js: pushGradient and pushSprite went on 2026-09-13)
+//   - fullscreen helpers
+//
+// Entry points and who calls them:
+//   drawInit()          game.js, once after glInit
+//   buildLoft(stations) vehicle.js (hulls via makeCraftSpec), track.js (kit pieces)
+//   Mesh.combine/upload track.js (buildScenery welds one big `stored` mesh)
+//   Mesh.render         track.js, vehicle.js, scene.js, debug.js
+//   Mesh.dispose        track.js (switching seed/circuit)
+//   pushGlow            track.js (nozzle glows, bursts, charge sparks, the sky kit's discs
+//                       during a bake)
+//   getAspect           hud.js
+//   isFullscreen/toggleFullscreen  game.js
+//
+// Loads after utilities.js (vec3, rgb, buildMatrix, lerp) and webgl.js (glPush,
+// glDraw, glRender, glBake, glBind). Everything is in world units; there are no textures.
+///////////////////////////////////////////////////////////////////////////////
 
-// only the colours the game reads: a `new Color` is a side effect terser must keep
+let cubeMesh, prismMesh, canopyMesh, craftSpecs, glowMeshes;
+
+// only the colours the game reads: a `new Color` at top level is a side effect terser
+// must keep, so dev-only colours belong in debug.js instead
 const WHITE  = rgb();
 const BLACK  = rgb(0,0,0);
-const YELLOW = rgb(1,1,0);
 
 ///////////////////////////////////////////////////////////////////////////////
+// Init: build and upload the shared kit
 
 const getAspect =()=> mainCanvasSize.x/mainCanvasSize.y;
 
 function drawInit()
 {
-    // ONE shape builder (spec: a small kit). the cube is the loft's diamond section turned
-    // 45 degrees and scaled back to half-extent 1; the prism is the section with its side
-    // points dropped to the base (an upright triangle with a degenerate fourth vertex)
-    cubeMesh = new Mesh([],[]).combine(buildLoft([[1,1,1,-1],[-1,1,1,-1]]),0,vec3(0,0,PI/4),vec3(2**.5,2**.5,1));
+    // the cube is the loft's diamond section turned 45 degrees and scaled back to
+    // half-extent 1; the prism is the section with its side points dropped to the base
+    // (an upright triangle with a degenerate fourth vertex)
+    cubeMesh = new Mesh().combine(buildLoft([[1,1,1,-1],[-1,1,1,-1]]),0,vec3(0,0,PI/4),vec3(2**.5,2**.5,1));
     prismMesh = buildLoft([[1,1,1,-1,0],[-1,1,1,-1,0]]);
-    {
-        // quad
-        const points1 = [vec3(-1,1),vec3(1,1),vec3(-1,-1),vec3(1,-1)];
-        quadMesh = new Mesh(points1, points1.map(p=>vec3(0,0,1)));
-    }
+
     {
         // the canopy: one shared unit loft (nose +z, base at y=0, half extents 1),
         // placed per craft by matrix. a knife point up front, the bubble's shoulder
         // just behind it, cut off square at the back
         canopyMesh = buildLoft([[1,0,.08,0], [.2,1,1,0], [-1,.62,.62,0]]);
     }
-    for(const m of [cubeMesh,quadMesh,prismMesh,canopyMesh]) m.upload();
-    craftSpecs=Array.from({length:8},(_,i)=>{
-        const s=makeCraftSpec(i); s.mesh=buildLoft(s.stations).upload(); return s;
+
+    // one hull per racer colour (racerColors, vehicle.js makeCraftSpec), uploaded on its first render
+    // like the cube and the canopy (Mesh.render uploads lazily): black is 6, white is 7
+    craftSpecs=racerColors.map((_,i)=>{
+        const s=makeCraftSpec(i);
+        s.mesh=buildLoft(s.stations);
+        return s;
     });
+
+    // bake the two glow fans (soft rim and flat disc) at unit size, so pushGlow outside
+    // a bake is a single matrix draw instead of a fresh fan of stream vertices
     glEnableFog=0;
     glowMeshes=[0,1].map(soft=>glBake(()=>pushGlow(vec3(),1,WHITE,soft)));
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// buildLoft: the only shape builder
 
 // the loft: diamond cross sections swept nose to tail, quads between them, capped both ends.
 // station = [z, halfWidth, topY, bottomY, sideHeight=.5] in craft units, nose +z, ordered
@@ -52,31 +86,37 @@ function buildLoft(stations)
     const quad = (a, b, c, d) =>
     {
         // a corner normal ((b-a)x(d-a), corner a's own two edges) degenerates whenever a
-        // vertex coincides with its neighbour - exactly what the point nose needs. the
-        // diagonal cross (c-a)x(d-b) stays non-degenerate there (only fails if BOTH
-        // diagonals collapse) and is the same vector up to scale on a planar quad: ≤2.6°
-        // off the corner normal everywhere this hull isn't degenerate.
+        // vertex coincides with its neighbour, which the point nose does. the diagonal
+        // cross (c-a)x(d-b) stays non-degenerate there (it only fails if BOTH diagonals
+        // collapse) and is the same vector up to scale on a planar quad: within 2.6
+        // degrees of the corner normal everywhere a hull is not degenerate
         const n = c.subtract(a).cross(d.subtract(b)).normalize();
         for(const p of [a,a,b,d,c,c])
             points.push(p), normals.push(n);
     };
+
+    // the sides: one quad per section edge between each pair of stations
     for(let i=0; i<stations.length-1; ++i)
     {
         const s1 = sect(stations[i]), s2 = sect(stations[i+1]);
         for(let k=0; k<4; ++k)
             quad(s1[k], s1[(k+1)%4], s2[(k+1)%4], s2[k]);
     }
+
     // caps: the tail, and the nose reversed (a craft's point nose closes itself; a box needs it)
     const t = sect(stations[stations.length-1]), h = sect(stations[0]);
-    quad(t[0], t[1], t[2], t[3]); quad(h[3], h[2], h[1], h[0]);
+    quad(t[0], t[1], t[2], t[3]);
+    quad(h[3], h[2], h[1], h[0]);
     return new Mesh(points, normals);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Mesh: a static vertex buffer in the shared 12-float format
+// (position xyz + material, normal xyz + specularity, RGBA), see glPushVert in webgl.js
 
 class Mesh
 {
-    constructor(points, normals)
+    constructor(points=[], normals=[])
     {
         this.points = points;
         this.normals = normals;
@@ -84,6 +124,8 @@ class Mesh
         this.mats = [];
     }
 
+    // create the GPU buffer. with no data it packs points/normals/colors/mats itself;
+    // glBake passes an already packed Float32Array of captured stream vertices
     upload(data)
     {
         if(!data)
@@ -95,31 +137,38 @@ class Mesh
                 data.set([p.x,p.y,p.z,this.mats[i]||0,n.x,n.y,n.z,0,c.r,c.g,c.b,c.a],i*12);
             }
         }
-        this.buffer=glContext.createBuffer(); this.count=data.length/12;
-        this.bytes=data.byteLength;
-        glBind(this.buffer); glContext.bufferData(gl_ARRAY_BUFFER,data,35044);
+        this.buf=glContext.createBuffer();
+        this.count=data.length/12; // vertices
+        debug && (this.bytes=data.byteLength);
+        glBind(this.buf);
+        glContext.bufferData(gl_ARRAY_BUFFER,data,35044); // STATIC_DRAW
         if(debug) ++glLiveBuffers, glStaticBytes+=this.bytes, ++glStaticUploads;
         return this;
     }
+
     dispose()
     {
-        if(this.buffer)
+        if(this.buf)
         {
-            glContext.deleteBuffer(this.buffer);
+            glContext.deleteBuffer(this.buf);
             if(debug) --glLiveBuffers, glStaticBytes-=this.bytes;
-            this.buffer=0;
+            this.buf=0;
         }
     }
-    render(transform, color=WHITE)
+
+    // flush the stream first so draw order is preserved, upload lazily, then one draw call.
+    // `stored` meshes (glBake, buildScenery) take material and specularity from their
+    // vertices; the rest use the current glEmissive/glSpecularity/glEnableFog uniforms
+    render(transform=new DOMMatrix, color=WHITE)
     {
         glRender();
-        this.buffer || this.upload();
-        glDraw(this.buffer,this.count,transform,color,this.stored);
+        this.buf || this.upload();
+        glDraw(this.buf,this.count,transform,color,this.stored);
     }
 
     // weld another mesh in: every loft quad is six verts, so concatenation keeps strip
-    // parity and only makes degenerate joins
-    // colour and emissive ride the vertices; the mesh must render `stored` (vertex materials)
+    // parity and only makes degenerate joins. colour and emissive ride the vertices, so
+    // the mesh must render `stored` (vertex materials)
     combine(mesh, pos, rot, scale, color=WHITE, mat=0)
     {
         const m = buildMatrix(pos, rot, scale);
@@ -132,50 +181,42 @@ class Mesh
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-function pushGradient(pos, size, color, color2=color)
-{
-    const mesh = quadMesh;
-    const points = mesh.points.map(p=>p.multiply(size).addSelf(pos));
-    glPush(points, 0, [color, color, color2, color2]);
-}
-
-// a camera facing quad in the flat color it is given (there are no textures)
-function pushSprite(pos, size, color)
-{
-    const points = quadMesh.points.map(p=>
-        vec3(p.x*abs(size.x)+pos.x, p.y*abs(size.y)+pos.y, pos.z));
-    glPush(points, 0, color);
-}
+// Immediate-mode pushes: these go through glPush, so they land in the stream
+// (drawn at the next glRender) or, inside glBake, in the mesh being baked
 
 // a triangle fan: a hot centre fading out to a transparent rim (soft), or a flat disc
 // (soft=0). it stands in camera XY, which for a round glow is close enough to camera facing.
-// NOTE the rim runs CLOCKWISE on purpose: glPush pushes the list in
-// REVERSE, so this is the order that comes out front facing (winding = front face,
-// the same rule the road quads and the trail ribbon follow). Reverse it and every
-// glow in the game silently vanishes into the back face cull.
-// rot: the fan's facing, the camera's unless a caller (the sky kit) gives its own
-function pushGlow(pos, size, color, soft=1, sides=8, rot=cameraRot)
+// The rim runs CLOCKWISE on purpose: glPush pushes the list in REVERSE, so this is the
+// order that comes out front facing, the same rule the road quads and the trail ribbon
+// follow. Back-face culling is off, so winding no longer hides anything; the rule is kept
+// so the geometry stays consistent.
+// rot: the fan's facing, the camera's unless a caller (the sky kit) gives its own.
+// size is the disc's diameter; flat squashes its height while baking (the sky kit's oval clouds).
+function pushGlow(pos, size, color, soft=1, sides=8, rot=cameraRot, flat=1)
 {
+    // outside a bake, draw the baked unit fan scaled up: one draw, no stream vertices
+    // (so `sides` only matters while baking, e.g. the sky kit's discs)
     if(!glCapture)
-        return glowMeshes[soft].render(buildMatrix(pos,rot,vec3(size,size,size)),color);
+        return glowMeshes[soft].render(buildMatrix(pos,rot,vec3(size)),color);
+
     const rim = soft ? rgb(color.r, color.g, color.b, 0) : color;
+
     // the whole frame is ONE triangle strip, and a strip flips winding on every odd
-    // triangle: push an ODD number of verts and everything drawn after this in the
-    // batch comes out back facing and is culled (this is what ate the sun's scanline
-    // bands). the fan is 2*sides+3 verts, so it opens on a doubled first rim point to
-    // make the count even. the duplicate is at the FRONT: at the back it would swap
-    // two verts of every real triangle and cull the fan itself
+    // triangle: push an ODD number of verts and everything drawn after this in the batch
+    // comes out back facing (with culling on, that ate the sun's scanline bands). the fan
+    // is 2*sides+3 verts, so it opens on a doubled first rim point to make the count even.
+    // the duplicate is at the FRONT: at the back it would swap two verts of every real
+    // triangle
     const points = [], colors = [];
     for(let i=0; i<=sides; ++i)
     {
-        const a = i/sides*2*PI, s = Math.sin(a)*size/2, c = Math.cos(a)*size/2;
-        const p = vec3(s,c,0).transform(buildMatrix(pos,rot));
+        const a = i/sides*2*PI, s = Math.sin(a)*size/2, c = Math.cos(a)*size/2*flat;
+        const p = vec3(s,c).transform(buildMatrix(pos,rot));
         i || (points.push(p), colors.push(rim)); // the parity vert
         points.push(p);
         colors.push(rim);
         if (i < sides)
-            points.push(pos), colors.push(color);
+            points.push(pos), colors.push(color); // the hot centre between rim points
     }
     glPush(points, 0, colors);
 }
@@ -183,13 +224,9 @@ function pushGlow(pos, size, color, soft=1, sides=8, rot=cameraRot)
 ///////////////////////////////////////////////////////////////////////////////
 // Fullscreen mode
 
-/** Returns true if fullscreen mode is active
- *  @return {Boolean}
- *  @memberof Draw */
+// true while fullscreen is active
 function isFullscreen() { return !!document.fullscreenElement; }
 
-/** Toggle fullsceen mode
- *  @memberof Draw */
 function toggleFullscreen()
 {
     const element = document.body;

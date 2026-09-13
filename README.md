@@ -1,48 +1,47 @@
-# SP13KTRA
+# 🦄🌈 SP13KTRA
 
-*An anti-gravity grand prix in 13 kilobytes. Race the spectrum.*
+*Full Spectrum Racing.*
+
+Race eight anti-gravity craft across eight spectral circuits in real 3D. Every circuit has its own colour, theme, and procedural soundtrack.
+
+Created by Frank Force for JS13k 2026
 
 ![SP13KTRA](cover.png)
 
-Eight craft, ten circuits, three laps each, and one energy meter that is your
-health, your boost fuel and your biggest decision. Made for js13kGames 2026 by
-Frank Force.
+## 🕹️ Controls
 
-**Play:** open `index.html`. No downloads, no server, no waiting.
+- Accelerate = Mouse Left, Up or W
+- Steer = Mouse, Left/Right or A/D
+- Turbo = Mouse Right or Left Shift
+- Brake = Mouse Middle or Space
+- Music on/off = M
 
-## Controls
+In the menu, click a circuit to pick it, click it again to race, and click TEAM to change craft.
 
-| Key | Action |
-| --- | --- |
-| Up | Accelerate |
-| Left / Right | Steer |
-| Down | Brake. Hold it with steer at speed to drift |
-| Space (held) | Boost, spending energy |
-| Mouse | Hold any button to steer: left drives, right brakes, middle boosts |
-| R / M / Escape | Restart / mute / back to the title |
-| Title | Left / Right browse circuits, Up / Down pick your colour, Space races |
+## 🏁 How to Play
 
-## Energy
+Finish a race to unlock the next circuit. Explode and you race it again.
 
-One meter, bottom left. Boost drains it, a clean drift refills it, and the
-rainbow strip beside the start straight refills it fast. Walls and bumps cost
-energy. Hit zero and you explode, then respawn at the last checkpoint with half
-a tank.
+- You have one energy meter: the turbo drains it, rainbow strips refill it, and walls and crashes cost it. At zero you explode.
+- Yellow pads boost you. Pulsing arrows point around turns.
+- White dashed shoulders are rough and slow you down, unless you turbo over them.
+- Let go of the gas to turn harder.
 
-## Drift
+## 🌈 Features
 
-Tap the brake while steering at racing speed. The nose swings in, the steering
-stays live and gas keeps the slide going. Hold it clean and your trail splits
-into the spectrum, energy refills and a release burst charges. Let go for a kick.
+- Eight circuits and eight rival craft, one colour of the spectrum each.
+- WebGL 3D rendering, lighting and fog, all generated from code.
+- Procedural music, every circuit's techno loop is composed from a seed and baked on the fly.
+- Canyons of towers, arch tunnels, banked bowls and a figure eight that crosses itself.
+- Suns, eclipses, stars and clouds, with a different sky on every circuit.
+- Boost pads, recharge strips, rough shoulders and rivals that race back.
+- A live minimap of the real circuit with every racer on it.
+- Your best placing and best time saved for every circuit.
 
-## The championship
+> ⬜🟥🟧🟨🟩🟦🟪⬛
 
-Finish on the podium to advance to the next circuit. Fourth or worse races it
-again. Every circuit is browsable from the title. Yellow bands are boost pads,
-the rainbow strip is recharge, glowing bands warn of a corner and the minimap
-is the real circuit with every racer on it.
+> **WHITE UNICORN. 🦄**
 
-Ten circuits, one colour each: REDSHIFT, FILAMENT, SODIUM, AURORA, CHERENKOV,
-RAYLEIGH, ULTRAVIOLET, UMBRA, ALBEDO and the finale, SP13KTRA.
+> *Drink the whole spectrum.*
 
-> **WHITE UNICORN.** *Drink the whole spectrum.*
+> ⬜🟥🟧🟨🟩🟦🟪⬛

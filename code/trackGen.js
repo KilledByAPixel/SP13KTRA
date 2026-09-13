@@ -1,62 +1,75 @@
 'use strict';
 
-// closed-loop circuit generation
-// - the track is a loop of lapTrackSegments; all lookups wrap via wrapSegment
-// - trackHeadingCum[i] = unwrapped heading at sample i (the generator fingerprint the tests hash)
+////////////////////////////////////////////////////////////////////////////////
+// trackGen.js: closed-loop circuit generation
+//
+// Owns: building the `track` array (lapTrackSegments route samples) for
+// the current circuit from its skeleton: heights with a swell, bank, the AI
+// racing line, the recharge strips, boost pads, rough shoulders and corner
+// warnings, then handing off to buildCourseWorld (track.js) for the meshes.
+// Entry point: buildTrack(), called by game.js when a race starts. It returns
+// early while worldKey still matches the circuit, so same-circuit
+// retries reuse the built world.
+// Reads: circuitCorners/levelInfo (levels.js), buildSkeleton and SK_*
+// (skeleton.js), laneWidth/lapTrackSegments/lapDistance/trackSeed/currentCircuit
+// (game.js), bermStart/worldKey (track.js).
+// Writes the globals below: vehicle.js steers rivals by trackRacingLine,
+// track.js orients scenery by trackHeadingCum and fills the minimap points that
+// hud.js draws, game.js converts route distance with routeScale, and the tests
+// hash trackHeadingCum and the pad layout.
+//
+// The track is a loop: every index lookup wraps via wrapSegment.
+////////////////////////////////////////////////////////////////////////////////
 
-let trackHeadingCum;   // unwrapped heading per sample: the generator fingerprint the tests hash
+let trackHeadingCum;   // unwrapped heading per sample (N+1 entries): the generator fingerprint the tests hash
 let trackRacingLine;   // per-segment ideal x offset for the AI racers
-let trackMapPts, trackMapCenter, trackMapRadius; // the loop in TRUE world space: [x,z] every 8 segments, its bounding box centre and half extent
-let lapWorldLength, routeScale=1.25; // real lap length, and world units per route unit
+let trackMapPts, trackMapCenter, trackMapRadius; // the loop in TRUE world space: [x,z] every 8 segments, its bounding box centre and half extent (filled by track.js)
+let routeScale=1.25; // world units per route unit (the real lap length over lapDistance, 1.1-1.55 per circuit)
 
-// a throwaway star polygon for the dev reroll (R on the title, 6 in dev mode)
-function randomCorners(count)
-{
-    const corners=[];
-    for(let k=0;k<count;++k)
-    {
-        const a=2*PI*k/count+random.float(-.2,.2), d=random.float(70,110);
-        corners.push([Math.sin(a)*d, Math.cos(a)*d, random.float(12,40), random.float(0,2500), random.float()<.3?SK_WAVE:0]);
-    }
-    return corners;
-}
-
-// Build one closed circuit
+////////////////////////////////////////////////////////////////////////////////
+// Build one closed circuit.
 function buildTrack()
 {
-    if(worldKey===trackSeed+':'+currentCircuit) return;
+    if(worldKey===currentCircuit) return; // this world is already built
     disposeWorld();
     const N = lapTrackSegments;
     track = [];
 
-    // Authored skeletons ship; a rerolled seed gets a random polygon for generator tests.
-    random.setSeed(trackSeed+currentCircuit*137);
-    const corners=debug && trackSeed!=1331?randomCorners(random.int(6,10)):circuitCorners[currentCircuit];
+    ////////////////////////////////////////////////////////////////////////////
+    // Skeleton: the authored corner polygon. Every circuit is preset, nothing is rerolled.
+    const corners=circuitCorners[currentCircuit];
     const sk=buildSkeleton(corners,N);
-    lapWorldLength=sk.length; routeScale=sk.length/lapDistance;
-    debug && LOG('lap',sk.length|0,'units, spacing',(sk.length/N).toFixed(1));
+    routeScale=sk.len/lapDistance;
+    debug && LOG('lap',sk.len|0,'units, spacing',(sk.len/N).toFixed(1));
     trackHeadingCum=new Float64Array(N+1);
-    for(let i=0;i<N;++i) trackHeadingCum[i+1]=trackHeadingCum[i]+clampAngle(sk.heading[(i+1)%N]-sk.heading[i]);
+    for(let i=0;i<N;++i)
+        trackHeadingCum[i+1]=trackHeadingCum[i]+clampAngle(sk.heading[(i+1)%N]-sk.heading[i]);
 
-    // --- heights: keyframes plus a gentle swell of whole-number frequencies (seamless) ---
+    ////////////////////////////////////////////////////////////////////////////
+    // Heights: the skeleton's keyframes plus a gentle swell of two sine waves.
+    // Whole-number frequencies keep the swell seamless across the lap.
     random.setSeed(trackSeed+currentCircuit*31);
-    const waves = [];
+    const waves = []; // [frequency in cycles per lap, amplitude, phase]
     for(let k=0; k<2; ++k)
         waves.push([random.int(3,8), levelInfo.bump/(k+1), random.float(2*PI)]);
 
-    // --- create segments ---
-    const width = laneWidth*1.6*levelInfo.laneCount; // wide, wipeout style
+    ////////////////////////////////////////////////////////////////////////////
+    // Segments: position, curvature, flags and bank per sample.
+    const width = laneWidth*1.6*levelInfo.laneCount; // half-width: 4,480 on four lanes
     for(let i=0; i<N; ++i)
     {
-        let height = sk.height[i];
+        let height = sk.y[i];
         for(const [f, a, ph] of waves)
             height += a*Math.sin(2*PI*f*i/N + ph);
-        const t = track[i] = new TrackSegment(i, vec3(sk.x[i], height, sk.z[i]), width);
-        t.turn = sk.turn[i]; t.flags = sk.flags[i];
-        // bank into the corner from curvature, or as the corner's flag says
-        t.roll = t.flags&SK_BANKED ? clamp(t.turn*9,-.5,.5) : clamp(levelInfo.bankAmp*t.turn,-.5,.5);
+        const t = track[i] = {pos:vec3(sk.x[i], height, sk.z[i]), w:width, turn:sk.turn[i], flags:sk.flags[i]}; // one route sample, a plain object (the TrackSegment class went on 2026-09-13): buildCourseWorld adds its frame (forward, right, up, pitch); roadType, padX and chev stay undefined until painted, and every read treats that as 0
+        // Bank into the corner from curvature (bankAmp climbs the ladder), or fully
+        // on a BANKED arc; either way clamped to +-.5.
+        t.roll = t.flags&SK_BANKED
+            ? clamp(t.turn*9,-.5,.5)                 // BANKED: saturates on any real corner
+            : clamp(levelInfo.bankAmp*t.turn,-.5,.5);
     }
-    // bank never changes suddenly: two box blurs over 121 samples (GDD: no sudden bank)
+
+    // Bank never changes suddenly: two box blurs over 121 samples.
     for(let pass=0; pass<2; ++pass)
     {
         const r = track.map(t=>t.roll);
@@ -68,53 +81,97 @@ function buildTrack()
         }
     }
 
-    // --- racing line: drift toward the inside of upcoming corners ---
+    ////////////////////////////////////////////////////////////////////////////
+    // Racing line: drift toward the inside of upcoming corners.
     trackRacingLine = new Float64Array(N);
     let lineX = 0;
-    for(let i=0; i<2*N; ++i) // second pass makes the wrap seam converge
+    for(let i=0; i<2*N; ++i) // two laps: the second pass makes the wrap seam converge
     {
         const j = wrapSegment(i);
         let ahead = 0;
-        for(let k=0; k<80; k+=8)
+        for(let k=0; k<80; k+=8) // sum the curvature 80 samples ahead
             ahead += track[wrapSegment(j+k)].turn;
-        const margin = track[j].width*bermStart-450; // inside the flat part of the ribbon, not a wall-era width
-        lineX = lerp(.03, lineX, clamp(300*ahead, -margin, margin));
+        const margin = track[j].w*bermStart-450; // stay on the flat part of the ribbon, 450 short of the berm
+        lineX = lerp(.03, lineX, clamp(300*ahead, -margin, margin)); // slow lerp: the line eases, never kinks
         trackRacingLine[j] = lineX;
     }
 
-    // Recharge is a safe outside line after the grid. Pad pairs weave exactly
-    // one lane across each acceleration straight, with a 15,000-world-unit gap.
-    for(let i=60;i<260;++i) track[i].roadType=2;
+    ////////////////////////////////////////////////////////////////////////////
+    // Pickups. paint marks n samples from i as roadType type with padX x: strips, pads
+    // and shoulders share both fields.
+    // The recharge strip (roadType 2, padX = the side) is a safe outside line on the right
+    // after the grid (samples 60-259; the start is at s=3000, sample 30), levelInfo.stripWidth
+    // wide. Scenery bit 8 adds a second one on the LEFT so the charge is not always in the
+    // same place: it starts at the first straight enough 200 samples (|turn| under .4, a
+    // 62,500 radius) from halfway round. A fixed 2060 put the old ULTRAVIOLET's on a bend.
+    // the assert is the guard: paint does NOT wrap, so a run that starts within n of the end
+    // would throw on track[i+k]. Every placement below stays clear of it today (the tightest
+    // is CHERENKOV's last shoulder, 13 samples), but the margins are the random stream's, not
+    // a rule, so the dev build says so at once instead of leaving a TypeError to read
+    const paint=(i,n,type,x)=>{ debug && ASSERT(i>=0 && i+n<=N, 'paint past the loop end'); for(let k=0;k<n;++k) track[i+k].roadType=type, track[i+k].padX=x; };
+    const strip=(i,side)=>paint(i,200,2,side);
+    strip(60,1);
+    if(levelInfo.scenery&8)
+    {
+        let i=2000;
+        while(i<N-400 && track.slice(i,i+200).some(t=>abs(t.turn)>.4)) i+=10;
+        strip(i,-1);
+    }
+
+    // Boost pads: pairs that weave exactly one lane across each acceleration straight,
+    // 120 samples (a 15,000-unit gap) apart, only where the WHOLE run is straight
+    // (|turn| under .1, a 250,000 radius): both pads and 96 samples of run-out past the
+    // second, about 12,000 units, a third of a second at pad speed. Checking one sample
+    // 150 on let the second pad start right at a corner on six circuits; 156 of run-out
+    // starved the twisty circuits, UMBRA to none. padWait spreads the pairs up the ladder.
     for(let i=300;i<N-300;++i)
     {
-        if(abs(track[i].turn)>.1 || abs(track[wrapSegment(i+150)].turn)>.1) continue;
+        if(track.slice(i,i+240).some(t=>abs(t.turn)>.1)) continue;
         const lanes=levelInfo.laneCount;
-        let lane=random.int(0,lanes);
+        let lane=random.int(0,lanes); // 0..lanes-1
         for(let g=0;g<2;++g)
         {
-            for(let k=0;k<6;++k)
-                track[i+k].roadType=1,track[i+k].padX=(lane-(lanes-1)/2)*laneWidth;
+            // A pad is 24 samples, about 3,000 units (6 read as a blip, 12 was still short). It
+            // yields to a strip under any of its samples: checking only the first sample once
+            // cut the second strips in two.
+            if(!track.slice(i,i+24).some(t=>t.roadType)) paint(i,24,1,(lane-(lanes-1)/2)*laneWidth); // lane centre, lanes centred on the road
             i+=120;
+            // The second pad steps one lane in from an edge lane, else a random neighbour.
             lane+=lane==0?1:lane==lanes-1?-1:random.sign();
         }
-        i+=random.int(150,300)*levelInfo.padWait|0;
+        i+=random.int(150,300)*levelInfo.padWait|0; // gap before the next pair (plus the loop's ++i)
     }
 
-    // --- corner warnings: every 24 samples (the single road panels), where a corner
-    // tighter than about a 31,000 radius is coming within 150 samples ---
+    // Rough shoulders (F-Zero's damaged verge): 120-sample stretches of the outer two and a half lanes (80 and two read short and narrow, 2026-09-13)
+    // on one side (roadType 3, padX = the side) that drag anyone on them, every 400-700
+    // samples. A stretch that would cross a pad or a strip is skipped whole (the test window is
+    // the painted length, see below): skipping only the overlap left holes that started and
+    // stopped the drag. The side is drawn before the test, so a skip never moves the stream.
+    for(let i=400;i<N-100;i+=random.int(400,700))
+    {
+        const side=random.sign();
+        if(track.slice(i,i+120).some(t=>t.roadType)) continue; // the whole painted run, not 80 of it: at 80 a pad 80-120 samples on was overwritten and lost its first ten samples (SODIUM's, 2026-09-13)
+        paint(i,120,3,side);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Corner warnings: every 24 samples (the single road panels), where the road turns
+    // more than a set amount over the next 150 samples: the SIGNED sum of turn (1 = a 25,000
+    // radius) at eight samples across the window, over 2, so a sweeper adds up while the two
+    // halves of a chicane or a wave crest cancel (the sharpest single sample used to decide,
+    // and flagged both sides of an S: Frank, 2026-09-13). The warning starts about 75 samples
+    // out, once half the window is in the corner.
+    // turn>0 is a right-hand corner (heading increases). chev is +1 before a right
+    // corner and -1 before a left one; track.js (buildScenery) stands a pulsing arrow
+    // beside the -x (left) wall for +1 and the +x wall for -1: the OUTSIDE of the corner.
+    // (The two names were once swapped and the warning sat on the inside.)
     for(let i=72; i<N; i+=24)
     {
-        let leftTurns = 0, rightTurns = 0;
-        for(let k=0; k<150; k+=20)
-        {
-            const x = track[wrapSegment(i+k)].turn;
-            if (x > 0) leftTurns  = max(leftTurns, x);
-            else       rightTurns = max(rightTurns, -x);
-        }
-        if (rightTurns > .8 || leftTurns > .8)
-            track[i].chev = sign(rightTurns - leftTurns);
+        let s = 0; // the heading change over the next 150 samples: alternating bends cancel, a sweeper adds up
+        for(let k=0; k<150; k+=20) s += track[wrapSegment(i+k)].turn;
+        if (abs(s) > 2) track[i].chev = sign(s);
     }
 
-    // the skyline field draws from random LAST: nothing placed above moves
+    // The skyline field draws from random LAST: nothing placed above moves when it changes.
     buildCourseWorld();
 }

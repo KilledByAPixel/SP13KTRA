@@ -1,55 +1,73 @@
 'use strict';
 
+///////////////////////////////////////////////////////////////////////////////
+// game.js: the game loop, race state, chase camera and save data.
+//
+// Owns the top-level race state every other file reads (time, frame, levelInfo,
+// vehicles, playerVehicle, cameraPos/Rot, the countdown and results timers, the
+// player's lap/place/energy) and the fixed-step frame loop. Entry points:
+//   gameInit()     called once from main.js; creates the canvases and starts the loop
+//   gameStart()    (re)builds the world and the grid; also called by debug.js and the
+//                  title/results/Escape paths below
+//   gameUpdate()   the requestAnimationFrame loop: input, fixed simulation steps,
+//                  camera, then drawScene (scene.js), drawHUD (hud.js), debugDraw
+//   updateCamera() the chase camera; vehicle.js also calls it to reseat after a death
+//   writeSaveData() vehicle.js calls it when a race finishes
+// The simulation itself is updateCars/stepVehicle in vehicle.js; the world is built
+// by buildTrack in trackGen.js/track.js; the circuit table is levels.js.
+///////////////////////////////////////////////////////////////////////////////
+
 // settings (the build flags - clampAspectRatios, testDrive, quickStart... - are declared
 // in the flags file that heads the concat order, so terser can fold them here AND in
 // the files before this one; see releaseJS13K.js)
-const pixelate = 0;
+const pixelate = 0;        // low-res canvas mode: off (only matters under clampAspectRatios)
 const canvasFixedSize = 0;
 const frameRate = 60;
-const timeDelta = 1/frameRate;
+const timeDelta = 1/frameRate; // the fixed simulation step, seconds
 const pixelateScale = 3;
-const random = new Random;
-let autoPause = enhancedMode;
+const random = new Random;     // the shared generator (track.js uses it for stars, clouds and scenery)
+let autoPause = enhancedMode;  // pause on focus loss: enhanced build only
 let autoFullscreen = 0;
 
 // setup
-const laneWidth = 700;             // thin race-course lanes
-const trackSegmentLength = 100;    // length of each segment
-const drawDistance = 1e3;          // how many track segments to draw
-const cameraPlayerOffset = vec3(0,860,2000); // pulled back: smaller craft, more road, speed reads better (z eases to 2300 on boost: updateCamera)
-const playerStartZ = 2e3;
-// the starting grid: eight staggered slots, pole nearest the line (also painted on the surface)
+const laneWidth = 700;             // the road half-width is laneWidth*1.6*laneCount (trackGen.js); pads sit on lane centres
+const trackSegmentLength = 100;    // route units per segment: s advances 100 per sample
+let cameraBoomZ = 2000; // pulled back: smaller craft, more road, speed reads better (eases out on a boost: updateCamera)
+// the starting grid: fieldSize staggered slots, pole nearest the line, one row per slot
 const slotZ = s => 2400 - s*520;
 const slotX = s => (s%2?1:-1)*800;
 const testStartZ = quickStart&&!testLevelInfo?5e3:0;
 
 // race setup
 const lapTrackSegments = 4000;  // segments per closed loop
-const lapDistance = lapTrackSegments*trackSegmentLength;
+const lapDistance = lapTrackSegments*trackSegmentLength; // route units per lap (400,000; world length is routeScale times that)
 const raceLaps = 3;
-const circuitCount = 10;
+const circuitCount = 8; // one per racer (ten until 2026-09-13: ALBEDO folded into UMBRA, then the angular ULTRAVIOLET went for the music's space)
 let currentCircuit = 0;
 let levelInfo; // active circuit biome, pinned for the whole race
-let playerLap, playerPlace, racePlace;
-let playerEnergy, playerDeadTime;
-let lastRacePlace = 8; // grid order carries over from the last finish
-let playerCraft = 0;   // the player's colour, 0..5 of racerColors, picked on the title
+let playerLap, playerPlace; // the results card shows lastRacePlace (racePlace, always assigned with it, went on 2026-09-13)
 
-let mainCanvasSize;// = pixelate ? vec3(640, 420) : vec3(1280, 720);
-let mainCanvas, mainContext;
+const fieldSize = 8;   // craft in a race: the player and 7 rivals (a field of 20 was tried: from the front you never see them)
+let lastRacePlace = fieldSize; // grid order carries over from the last finish
+let playerCraft = 0;   // the player's colour, 0..5 of racerColors, picked on the menu
+
+let mainCanvasSize; // set every frame from the window in gameUpdate
+let menuStick; // the gamepad stick's latched direction in the menu (dev and enhanced builds)
+let mainCanvas, mainContext; // the 2D HUD canvas over the WebGL one (glCanvas, webgl.js)
 let time, frame, frameTimeLastMS, frameTimeBufferMS, paused, focusPaused; // averageFPS lives in debug.js (dev-only readout)
-let startCountdown, startCountdownTimer, gameOverTimer;
+let startCountdown, gameOverTime;
 let raceTime, playerWin;
-let titleScreenMode = 1;
-let trackSeed = 1331;
+let titleScreenMode = 1, menuMode = 0; // menuMode: the title's menu screen (circuit and craft select, hud.js)
+let trackSeed = 1331; // the world's random seed: every circuit is preset
 
 ///////////////////////////////
 // game variables
 
 let cameraPos, cameraRot;
-let track, vehicles, playerVehicle;
+let track, vehicles, playerVehicle; // vehicles[0] is the player at a race start (the menu's craft pick swaps the reference)
 
 ///////////////////////////////
+// startup
 
 function gameInit()
 {
@@ -62,137 +80,190 @@ function gameInit()
     if (quickStart || testLevel)
         titleScreenMode = 0;
 
-    debug && debugInit();
     glInit();
-        
+
     document.body.appendChild(mainCanvas = document.createElement('canvas'));
     mainContext = mainCanvas.getContext('2d');
-    // the canvases' position:absolute (and the enhanced build's centring transform)
-    // and the body's margin 0 are the page's own CSS: build.js's shell and index.html
+    // the page's CSS, set here so it rides roadroller instead of deflate: the 13k shell has
+    // no <style> tag at all (-21 against the tag, and property sets beat one cssText string
+    // by 9). The enhanced shell adds its centring transform
+    document.body.style.margin=0; document.body.style.background=BLACK;
+    mainCanvas.style.position=glCanvas.style.position='absolute';
 
     drawInit();
     inputInit()
+    debug && debugInit(); // after inputInit: it chains the free cam's look onto the mouse steer handler
     initLevelInfos();
     gameStart();
     gameUpdate();
 }
 
+///////////////////////////////
+// a race (or the title's attract lap): rebuild the world, seat the grid, seat the camera
+
 function gameStart()
 {
-    time=frame=frameTimeLastMS=frameTimeBufferMS=raceTime=playerLap=playerWin=playerDeadTime=0;
-    playerEnergy=100; contactTimes=[];
-    startCountdown=quickStart || titleScreenMode ? 0 : 4;
+    time=frame=frameTimeLastMS=frameTimeBufferMS=raceTime=playerLap=playerWin=0;
+    contactTimes=[]; // the craft-contact cooldowns (vehicle.js)
+    startCountdown=quickStart || titleScreenMode ? 0 : 4; // 3, 2, 1, GO
     levelInfo=testLevelInfo || levelInfoList[currentCircuit];
-    startCountdownTimer=new Timer; gameOverTimer=new Timer;
-    cameraPos=vec3(); cameraRot=vec3(); vehicles=[];
-    buildTrack();
-    playerPlace=8; racePlace=0;
-    const slot=clamp(lastRacePlace-1,0,7);
-    vehicles.push(playerVehicle=new PlayerVehicle(slotZ(slot),hsl(...racerColors[playerCraft]),playerCraft));
-    playerVehicle.place(slotZ(slot),slotX(slot));
-    if(!disableAiVehicles) for(let i=0,s=0;i<7;++i,++s)
+    gameOverTime=0;
+    cameraPos=vec3();
+    cameraRot=vec3();
+    vehicles=[];
+    buildTrack(); // same circuit reuses buffers, a new one disposes the old world (track.js)
+    musicLoad(); // a new circuit's loop from its seed, from the top; the same circuit carries on (music.js)
+    playerPlace=fieldSize;
+
+    // the player takes the grid slot of the last finishing place; the rivals fill the rest
+    // in order (their colour goes by grid order, their skill by colour: vehicle.js)
+    const slot=clamp(lastRacePlace-1,0,fieldSize-1);
+    vehicles.push(playerVehicle=new Vehicle(slotZ(slot),slotX(slot),hsl(...racerColors[playerCraft]),playerCraft));
+    if(!disableAiVehicles) for(let i=0,s=0;i<fieldSize-1;++i,++s)
     {
-        if(s==slot) ++s;
-        const v=new Racer(slotZ(s),i); v.place(slotZ(s),slotX(s)); vehicles.push(v);
+        if(s==slot) ++s; // skip the player's slot
+        vehicles.push(new Racer(slotZ(s),slotX(s),i));
     }
-    if(titleScreenMode)
-        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000-i*750,(i%2?1:-1)*800);
-    if(debug) debugSkipped=0;
+    if(titleScreenMode) // attract mode: the field spread down the road a fifth of a lap in, for the camera to look at
+        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000-i*750,slotX(i));
+    if(debug) debugSkipped=0; // a fresh race can set a record again
     cameraRot.y=playerVehicle.heading;
-    for(let i=99;i--;) updateCamera();
+    for(let i=99;i--;) updateCamera(); // run the camera's easing to rest so the first frame is seated
 }
+
+///////////////////////////////
+// one fixed simulation step: title/race flow, then the vehicles
 
 function gameUpdateInternal()
 {
     if (titleScreenMode)
     {
-        // update title screen
-        if (keyWasPressed('Space') || mousePressed || enhancedMode && isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9)))
+        // the title shows the logo over the attract lap; Space or a click opens the MENU,
+        // where a click on a name or Up/Down (wrapping) picks the circuit from the unlocked list, the TEAM button or Left/Right
+        // the craft, Space or a click on the selected name races, and Escape returns to the title. Results
+        // return to the menu. The attract race never restarts on its own: the field laps until a new
+        // circuit or a race (a restart every 60 s went on 2026-09-13, Frank: they just keep racing)
+        let go = keyWasPressed('Space') || enhancedMode && isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9));
+        if (!freeCamMode) // the free cam has the keys and the mouse (debug.js) and hides the HUD: the title and the menu ignore them (the else below is the menu's)
+        if (!menuMode)
+            (go || mousePressed) && (menuMode = 1, sound_checkpoint.play(.5));
+        else
         {
-            titleScreenMode = 0;
-            gameStart();
+            // the mouse: a click on a circuit's name selects it, a click on the selected name
+            // races, anywhere else does nothing. The click has to land on the name itself:
+            // hud.js records each row's measured right edge (menuRowW, in mouseX units) and
+            // menuRowAt is the one hit test (the hover previews it). A locked name just bumps
+            let pick = 0, craft = 0;
+            const c = mousePressed ? menuRowAt() : -1;
+            if (c >= 0) c == circuitCount ? craft = 1 : c >= circuitsUnlocked() ? sound_bump.play(.5,.7) : c == currentCircuit ? go = 1 : pick = c - currentCircuit; // (row circuitCount is the TEAM button)
+            if (go)
+            {
+                titleScreenMode = 0;
+                gameStart();
+            }
+            if (keyWasPressed('Escape'))
+                menuMode = 0;
+
+            enhancedMode && (pick ||= keyWasPressed('ArrowDown') - keyWasPressed('ArrowUp')); // the arrow keys browse the menu in the dev and enhanced builds; the 13k build's menu is the mouse (2026-09-13: its arrow keys went for WASD, -11)
+            if (enhancedMode && isUsingGamepad) // the left stick, latched, browses the menu too (dev and enhanced builds, 2026-09-13); the d-pad is in it already (input.js copies it in: reading the buttons as well moved two rows)
+            {
+                const s = gamepadStick(0), d = vec3(abs(s.x) > .5 ? sign(s.x) : 0, abs(s.y) > .5 ? sign(s.y) : 0);
+                pick ||= -(d.y != menuStick?.y && d.y);
+                craft += d.x != menuStick?.x && d.x;
+                menuStick = d;
+            }
+            if (pick)
+            {
+                // the circuit: only unlocked ones, every circuit up to the one after the last
+                // finished (the dev [ ] keys browse all), wrapping; one circuit alone stays put
+                // (a reload of the same one looked like a glitch); the world rebuilds
+                const c = mod(currentCircuit + pick, circuitsUnlocked());
+                if (c != currentCircuit)
+                {
+                    currentCircuit = c;
+                    sound_charge.play(.5);
+                    gameStart();
+                    writeSaveData(); // the pick is saved: a reload opens on the circuit last played
+                }
+            }
+
+            enhancedMode && (craft += keyWasPressed('ArrowRight') - keyWasPressed('ArrowLeft'));
+            if (craft)
+            {
+                // the craft, by Left/Right or a click on the TEAM button: one of the six band
+                // colours, never black or white. You BECOME that craft where it is in the attract
+                // lap and the camera cuts over; no restart. The old craft stays in the field as a rival
+                playerCraft = mod(playerCraft + craft, 6);
+                sound_checkpoint.play(.5);
+                playerVehicle = vehicles.find(v=>v.racerIndex==playerCraft);
+                cameraRot.y = playerVehicle.heading;
+                for(let i=60;i--;) updateCamera();
+                // the warm-up settles the camera on its target with the craft frozen, but in
+                // motion the .22 position ease trails the target by about 2.3 frames of travel,
+                // so the camera then fell back over a dozen frames (measured): start it at that lag
+                cameraPos.addSelf(playerVehicle.velocity.scale(-timeDelta*2.3));
+                writeSaveData(); // the craft choice is saved
+            }
         }
-        if (keyWasPressed('ArrowRight') || keyWasPressed('ArrowLeft'))
-        {
-            // browse circuits from the title screen
-            currentCircuit = mod(currentCircuit + (keyWasPressed('ArrowRight')?1:-1), circuitCount);
-            sound_checkpoint.play(.5);
-            gameStart();
-        }
-        if (keyWasPressed('ArrowUp') || keyWasPressed('ArrowDown'))
-        {
-            // pick a craft colour: one of the six band colours, never black or white
-            playerCraft = mod(playerCraft + (keyWasPressed('ArrowUp')?1:-1), 6);
-            sound_checkpoint.play(.5);
-            gameStart(); writeSaveData();
-        }
-        if (time > 60)
-            gameStart(); // restart attract mode
     }
     else
     {
-        if (startCountdown > 0 && !startCountdownTimer.active())
+        if (startCountdown && time >= 4-startCountdown)
         {
+            // one beep a second, higher on GO
             --startCountdown;
             sound_beep.play(1,startCountdown?1:2);
-            //speak(startCountdown || 'GO!' );
-            startCountdownTimer.set(1);
         }
 
-        if (gameOverTimer.get() > 1 && (keyWasPressed('Space') || mousePressed || enhancedMode && isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9))) || gameOverTimer.get() > 12)
+        // results: Space/click after a second, or 12 s on their own, leave the results card
+        if (gameOverTime && time-gameOverTime > 1 && (keyWasPressed('Space') || mousePressed || enhancedMode && isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9))) || gameOverTime && time-gameOverTime > 12)
         {
-            // podium finish advances the grand prix
-            if (playerWin && racePlace && racePlace <= 3)
+            // any finish advances the grand prix (the finale's wraps to the opener); a death
+            // retries: finishing is enough, there is no podium rule
+            if (playerWin)
             {
                 currentCircuit = (currentCircuit+1)%circuitCount;
                 writeSaveData();
             }
 
-            // go back to title screen after a while
+            // back to the title, which shows the next circuit (or the same one to retry)
             titleScreenMode = 1;
             gameStart();
         }
         if (keyWasPressed('Escape') || enhancedMode && isUsingGamepad && gamepadWasPressed(8))
         {
             // go back to title screen
-            sound_bump.play(2);
+            sound_charge.play();
             titleScreenMode = 1;
             gameStart();
         }
-        /*if (keyWasPressed('KeyR'))
+        // (R restart lives in enhancedModeUpdate: it is a dev/enhanced key, not a 13k one)
+
+        if (!startCountdown && !gameOverTime)
         {
-            titleScreenMode = 0;
-            sound_lose.play(1,2);
-            gameStart();
-        }*/
-        
-        if (!startCountdown && !gameOverTimer.isSet())
-        {
-            // race mode
+            // race mode: the clock runs from GO until the results card
             raceTime += timeDelta;
-            if (debug && keyWasPressed('KeyN'))
-            {
-                // course-viewing skip: dev only (debug=0 const in the release build, so
-                // terser drops this) and it poisons the run, same as debug.js's Digit1/2
-                playerVehicle.place(playerVehicle.s+lapDistance/4);
-                debugSkipped = 1; // a skipped race never writes a record
-            }
+            // course-viewing skip: dev only (debug=0 const in the release build, so terser
+            // drops this), gates counted, and it poisons the run (debug.js debugSkip)
+            debug && keyWasPressed('KeyN') && debugSkip(1);
         }
     }
-    updateCars();
+    updateCars(); // player, rivals, contacts, laps and the finish (vehicle.js); runs on the title too
 }
+
+///////////////////////////////
+// the frame loop: size the canvas, catch up the fixed steps, draw
 
 function gameUpdate(frameTimeMS=0)
 {
     if (!clampAspectRatios)
-        mainCanvasSize = vec3(mainCanvas.width=innerWidth, mainCanvas.height=innerHeight);
+        mainCanvasSize = vec3(mainCanvas.width=innerWidth, mainCanvas.height=innerHeight); // the 13k build: the canvas is the window
     else
     {
-        // more complex aspect ratio handling
+        // enhanced build: clamp the aspect and letterbox
         const innerAspect = innerWidth / innerHeight;
         if (canvasFixedSize)
         {
-            // clear canvas and set fixed size
             mainCanvas.width  = mainCanvasSize.x;
             mainCanvas.height = mainCanvasSize.y;
         }
@@ -210,22 +281,24 @@ function gameUpdate(frameTimeMS=0)
             else
                 mainCanvasSize = vec3(mainCanvas.width=correctedWidth, mainCanvas.height=innerHeight);
         }
-            
+
         // fit to window by adding space on top or bottom if necessary
         const fixedAspect = mainCanvas.width / mainCanvas.height;
         mainCanvas.style.width  = glCanvas.style.width  = innerAspect < fixedAspect ? '100%' : '';
         mainCanvas.style.height = glCanvas.style.height = innerAspect < fixedAspect ? '' : '100%';
     }
-    
+
     if (enhancedMode)
     {
         if (paused)
         {
-            // hack: special input handling when paused
+            // the fixed-step loop below skips its input calls while paused (no time
+            // accrues), so the pause keys poll here
             inputUpdate();
-            if (focusPaused && document.hasFocus()) // a focus-loss pause ends when focus returns (Frank, 2026-09-09)
+            if (engineSound) engineSound.stop(), engineSound = 0; // the fixed step is skipped: stop the engine loop here (updateCars restarts it)
+            if (focusPaused && document.hasFocus()) // a focus-loss pause ends when focus returns
                 paused = focusPaused = 0;
-            if (keyWasPressed('Space') || keyWasPressed('KeyP') || isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9)))
+            if (keyWasPressed('Space') || isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9)))
             {
                 paused = focusPaused = 0;
                 sound_checkpoint.play(.5);
@@ -234,7 +307,7 @@ function gameUpdate(frameTimeMS=0)
             {
                 // go back to title screen
                 paused = 0;
-                sound_bump.play(2);
+                sound_charge.play();
                 titleScreenMode = 1;
                 gameStart();
             }
@@ -245,45 +318,44 @@ function gameUpdate(frameTimeMS=0)
     // update time keeping
     let frameTimeDeltaMS = frameTimeMS - frameTimeLastMS;
     frameTimeLastMS = frameTimeMS;
-    if (debug) // +/- to speed/slow time (everything inside the gate, so the release ships none of it)
+    if (debug) // everything inside the gate, so the release ships none of it
     {
-        const debugSpeedUp   = devMode && (keyIsDown('Equal')|| keyIsDown('NumpadAdd')); // +
-        const debugSpeedDown = devMode && (keyIsDown('Minus') || keyIsDown('NumpadSubtract')); // -
-        frameTimeDeltaMS *= debugSpeedUp ? 20 : debugSpeedDown ? .1 : 1;
+        // held + runs time ten times faster, held - a tenth; no dev mode needed
+        const debugSpeedUp   = keyIsDown('Equal') || keyIsDown('NumpadAdd');      // +
+        const debugSpeedDown = keyIsDown('Minus') || keyIsDown('NumpadSubtract'); // -
+        frameTimeDeltaMS *= debugSpeedUp ? 10 : debugSpeedDown ? .1 : 1;
     }
     debug && (averageFPS = lerp(.05, averageFPS, 1e3/(frameTimeDeltaMS||1))); // dev readout only
     frameTimeBufferMS += paused ? 0 : frameTimeDeltaMS;
-    frameTimeBufferMS = min(frameTimeBufferMS, 50); // clamp in case of slow framerate
+    frameTimeBufferMS = min(frameTimeBufferMS, 50); // slow framerate: about three catch-up steps at most, then the game slows rather than spirals
 
     // update multiple frames if necessary in case of slow framerate
     for (;frameTimeBufferMS >= 0; frameTimeBufferMS -= 1e3/frameRate)
     {
-        // increment frame and update time
         time = frame++ / frameRate;
         gameUpdateInternal();
         // gated at the CALL: terser leaves an emptied function and its call behind
         // (function t(){} ... t()), a folded && leaves nothing
         enhancedMode && enhancedModeUpdate();
+        musicMuted ^= keyWasPressed('KeyM'); // the music on or off, every build (it sat in enhancedModeUpdate, so the 13k build had no M until 2026-09-13); the sound effects stay
         debug && debugUpdate();
         inputUpdate();
-    
+        musicUpdate(); // the title and results loop (music.js): starts, stops and retries by state and focus
+
         if (enhancedMode && !titleScreenMode)
         if (keyWasPressed('KeyP') || isUsingGamepad && gamepadWasPressed(9))
-        if (!gameOverTimer.isSet())
+        if (!gameOverTime)
         {
-            // update pause
             paused = 1;
             sound_checkpoint.play(.5,.5);
         }
-        
+
         updateCamera();
 
         inputUpdatePost();
     }
 
-    //mainContext.imageSmoothingEnabled = !pixelate;
-    //glContext.imageSmoothingEnabled = !pixelate;
-
+    // draw: the WebGL scene, the 2D HUD over it, then the dev overlay
     glPreRender(mainCanvasSize);
     drawScene();
     drawHUD();
@@ -291,7 +363,10 @@ function gameUpdate(frameTimeMS=0)
     requestAnimationFrame(gameUpdate);
 }
 
-function enhancedModeUpdate() // enhanced build only: gated at the call
+///////////////////////////////
+// enhanced build only: focus handling and the dev/enhanced keys (gated at the call)
+
+function enhancedModeUpdate()
 {
     if (document.hasFocus())
     {
@@ -303,19 +378,9 @@ function enhancedModeUpdate() // enhanced build only: gated at the call
     if (!titleScreenMode && autoPause && !document.hasFocus())
         paused = focusPaused = 1; // pause when losing focus
 
-    if (keyWasPressed('Home')) // dev mode
-        devMode || (debugInfo = devMode = 1);
-    if (keyWasPressed('KeyI')) // debug info
-        debugInfo = !debugInfo;
-    if (keyWasPressed('KeyM')) // toggle mute
-    {
-        if (soundVolume)
-            sound_bump.play(.4,3);
-        soundVolume = soundVolume ? 0 : .3;
-        if (soundVolume)
-            sound_bump.play();
-    }
-    if (keyWasPressed('KeyR') && !titleScreenMode) // restart (title R = the dev build's course reroll, debug.js)
+    if (debug && keyWasPressed('Home')) // dev mode, on or off, remembered across reloads (debug.js devSet; the enhanced build has no debug.js)
+        devSet(!devMode);
+    if (keyWasPressed('KeyR') && !titleScreenMode) // restart
     {
         titleScreenMode = 0;
         sound_lose.play(1,2);
@@ -323,41 +388,74 @@ function enhancedModeUpdate() // enhanced build only: gated at the call
     }
 }
 
+///////////////////////////////
+// the chase camera: behind and above the player, following the travel direction,
+// kept above the nearby road. The dev free camera (debug.js) overrides it at the end.
+
 function updateCamera()
 {
     const v=playerVehicle;
     const boost=v.boostTime>time;
-    cameraPlayerOffset.z=lerp(.08,cameraPlayerOffset.z,boost?2300:2000);
+    cameraBoomZ=lerp(.08,cameraBoomZ,boost?2300:2000); // the boom eases out 300 units on a boost
     boostFov=lerp(.1,boostFov,boost); // the lens widens on a boost (glPreRender)
-    // The chase camera follows the travel direction with a 30% lean toward the nose, so a
-    // slide shows the craft swung across the screen rather than the world spinning.
-    const travel=v.speed>1000?Math.atan2(v.velocity.x,v.velocity.z):v.heading;
-    cameraRot.y+=clampAngle(travel+clampAngle(v.heading-travel)*.3-cameraRot.y)*.12;
-    const f=vec3(Math.sin(cameraRot.y),0,Math.cos(cameraRot.y));
-    const target=v.pos.subtract(f.scale(cameraPlayerOffset.z)).addSelf(vec3(0,900,0));
-    // Keep the boom above the nearby road without a general scenery collider.
-    const r=projectRoute(target,v.s-cameraPlayerOffset.z/routeScale), info=r.info;
-    const x=clamp(r.x,-info.width+500,info.width-500), surface=info.point(x,650);
-    target.addSelf(info.right.scale(x-r.x)); target.y=max(target.y,surface.y);
-    cameraPos=cameraPos.lerp(target,.22);
-    cameraRot.x=lerp(.12,cameraRot.x,.26+info.pitch*.5);
-    cameraRot.z=lerp(.08,cameraRot.z,-Math.atan(info.roll)*.3);
-    if(freeCamMode) cameraPos=freeCamPos.copy(),cameraRot=freeCamRot.copy();
+
+    // the camera follows the travel direction with a 30% lean toward the nose, so a
+    // slide shows the craft swung across the screen rather than the world spinning
+    const travel=v.speed>1000?Math.atan2(v.velocity.x,v.velocity.z):v.heading; // below 1000 units/s the velocity direction is noise: use the heading
+    cameraRot.y+=clampAngle(travel+clampAngle(v.heading-travel)*.3-cameraRot.y)*.2; // yaw ease per step
+    const f=vec3(Math.sin(cameraRot.y),0,Math.cos(cameraRot.y)); // the camera's own forward on the ground plane
+    const target=v.pos.subtract(f.scale(cameraBoomZ)).addSelf(vec3(0,900)); // boom length back along it, 900 units up
+
+    // keep the boom above the nearby road without a general scenery collider: project the
+    // target onto the route (hinted a boom length behind the player), clamp it 500 units
+    // inside the walls and never let it sink under the road plus 650
+    const r=projectRoute(target,v.s-cameraBoomZ/routeScale), info=r.info;
+    const x=clamp(r.x,-info.w+500,info.w-500), surface=info.point(x,650);
+    target.addSelf(info.right.scale(x-r.x));
+    target.y=max(target.y,surface.y);
+
+    cameraPos=cameraPos.lerp(target,.22);                        // position ease
+    cameraRot.x=lerp(.12,cameraRot.x,.26+info.pitch*.5);         // look down .26 rad plus half the road's pitch (positive pitch = descending, track.js)
+    cameraRot.z=lerp(.08,cameraRot.z,-Math.atan(info.roll)*.3);  // roll with 30% of the road's bank
+
+    if(freeCamMode)
+    {
+        cameraPos=freeCamPos.copy();
+        cameraRot=freeCamRot.copy();
+    }
+    if(topDownMode) // the dev map view (debug.js): 500k straight up over the loop's centre plus the pan; glPreRender goes orthographic
+    {
+        cameraPos=trackMapCenter.add(topDownPan).addSelf(vec3(0,5e5,0));
+        cameraRot=vec3(PI/2,0,0); // pitch only: vec3(s) is (s,s,s)
+    }
 }
 
 ///////////////////////////////////////
 // save data
 
-// one key, comma joined: best time, circuit reached, last finishing place. the 3D rebuild
-// changed the game enough that older saves are ignored
-const saveName = 'SP13K3D';
-const saveData=(localStorage[saveName] || '0,0,8,0').split(',');
-let bestTime = saveData[0]*1 || 0;
-currentCircuit = mod(saveData[1]*1 || 0, circuitCount); // never index past the circuit table
-lastRacePlace = saveData[2]*1 || 8;
-playerCraft = mod(saveData[3]*1 || 0, 6);
+// one key, comma joined: the circuit shown, the last finishing place, the craft colour,
+// the best placing per circuit as one digit each (0 = never finished), then each circuit's best finishing time in seconds (0 or empty = none). The menu
+// shows the placing with the time under it and browses up to the circuit after the last one
+// finished (the placings alone were the record until 2026-09-13). Older SP13K saves are ignored
+// (the migration was dropped in the size pass). Read once at load, here, after the
+// declarations above; written on a craft pick and a finish (vehicle.js)
+const saveName = 'SP13KTRA';
+// the enhanced build survives denied storage (a SecurityError stopped the page before gameInit; 2026-09-13), no progress
+// kept; the 13k build folds to the plain read and write
+const saveData=((enhancedMode ? (()=>{try{return localStorage[saveName]}catch(e){}})() : localStorage[saveName]) || '').split(',');
+currentCircuit = mod(saveData[0]*1 || 0, circuitCount); // never index past the circuit table
+lastRacePlace = saveData[1]*1 || fieldSize;
+playerCraft = mod(saveData[2]*1 || 0, 6);
+let bestPlaces = (saveData[3] || '').padEnd(circuitCount, 0); // a string of circuitCount digits
+let musicMuted = 0, bestTimes = saveData.slice(4).map(Number); // the M key's music-off flag (not saved since 2026-09-13); bestTimes[c] the best finish on circuit c in seconds, 0 for none
+const circuitsUnlocked = () => min(circuitCount, bestPlaces.search(/0*$/)+1); // every circuit up to the one after the last finished
 
 function writeSaveData()
 {
-    localStorage[saveName] = [bestTime, currentCircuit, lastRacePlace, playerCraft]; // toString joins them
+    // toString joins them (a hole in bestTimes joins as nothing and reads back as 0). The array is written out in both
+    // branches so the 13k build folds to exactly the plain write (a shared const survived the fold, +7)
+    if (enhancedMode)
+        try { localStorage[saveName] = [currentCircuit, lastRacePlace, playerCraft, bestPlaces, ...bestTimes]; } catch(e) {} // denied or full: the session plays on unsaved
+    else
+        localStorage[saveName] = [currentCircuit, lastRacePlace, playerCraft, bestPlaces, ...bestTimes];
 }
