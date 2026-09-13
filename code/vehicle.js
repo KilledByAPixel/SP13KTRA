@@ -216,13 +216,14 @@ class Racer extends Vehicle
 // Also drives the player on the title screen and under autodrive (testDrive), where
 // skill and lineOffset are missing: hence the || fallbacks.
 // rival tunables (2026-09-13 tries, Frank: rivals too easy): aiClip, the pace clip before the catch-up as a fraction of the
-// normal top speed (1 until then: no rival passed 32,000 on a straight unless well behind); aiCornerSlow, the pace cut per
+// normal top speed times the circuit's rivalSkill, so the straights get faster up the ladder too (1.046 on REDSHIFT to 1.12 on
+// the finale; a flat 1.05 for an hour, and 1 until then, when the ladder only reached the corners); aiCornerSlow, the pace cut per
 // unit of the sharpest turn ahead (.2 until then); aiCornerBrake, speed times turn that brakes (24,000 until then; a player
 // only lifts); aiBoostGap, how far behind the player a rival holds its free turbo (8,000 until then; 4,000 crowded him to death);
 // aiLine, how much of the racing line a rival follows (.35 until then: it cut every corner tighter than the road allows). A solo
 // time trial at skill 1 (local/ai-corner-trial.js) chose .08, 34,000 and .7 over .15, 30,000 and .35: REDSHIFT 48.0 to 47.0 s,
 // ULTRAVIOLET 56.1 to 51.4, UMBRA 65.7 to 62.4 (3 wall hits from 0), SP13KTRA 65.4 to 63.0; with no corner brake it died on UMBRA
-const aiClip=1.05, aiCornerSlow=.08, aiCornerBrake=34000, aiBoostGap=5000, aiLine=.7;
+const aiClip=.96, aiCornerSlow=.08, aiCornerBrake=34000, aiBoostGap=5000, aiLine=.7;
 function driveAI(v)
 {
     const info=new TrackSegmentInfo(v.s), seg=info.segmentIndex;
@@ -244,7 +245,7 @@ function driveAI(v)
     const gap=playerVehicle.raceDistance-v.raceDistance;
     // the pace is clipped to the normal top speed BEFORE the catch-up, so a rival well behind can run past it
     // (clipped after, in stepVehicle, until 2026-09-13: the rubber band could never close on a player on the turbo)
-    targetSpeed=min(targetSpeed,maxCraftSpeed*aiClip)*clamp(1+gap/400000,.98,1.1);
+    targetSpeed=min(targetSpeed,maxCraftSpeed*levelInfo.rivalSkill*aiClip)*clamp(1+gap/400000,.98,1.1);
 
     // traffic: swerve a lane away from a craft close ahead and do not ram it
     for(const other of vehicles)
