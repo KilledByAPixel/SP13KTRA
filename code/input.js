@@ -21,7 +21,7 @@
 // is enhancedMode, a const 0 in the 13k build, so terser folds every gamepad path away).
 // Mouse: a click enters mouse mode, in which the pointer steers by how far it sits from
 // the centre of the window whether or not a button is held; the left button drives,
-// right boosts, a click starts. Left/Right arrows return to keyboard mode.
+// right boosts, a click starts. Any key returns to keyboard mode.
 // Touch is deferred until it is designed.
 const gamepadsEnable = enhancedMode;
 const inputWASDEmulateDirection = enhancedMode; // WASD doubles as the arrows (folded out of the 13k build)
@@ -47,7 +47,7 @@ const gamepadStick       = (stick, gamepad=0) => // dead-zoned vec3, y up; zero 
 let inputData = []; // what keys are down, by e.code
 // mouseX -1..1 across the window, mouseY 0..1 down it (the menu's rows); mouseButtons a bit
 // per held button (1 left, 2 middle, 4 right); mousePressed: left pressed this frame;
-// mouseMode: a click sets it, a steer key clears it
+// mouseMode: a click sets it, any key clears it
 let mouseX = 0, mouseY = 0, mouseButtons = 0, mousePressed = 0, mouseMode = 0;
 
 function inputInit()
@@ -64,8 +64,7 @@ function inputInit()
     onkeydown = (e)=>
     {
         enhancedMode && (isUsingGamepad = 0); // any key press hands control back to the keyboard
-        const k = inputWASDEmulateDirection ? remapKey(e.code) : e.code; // A and D read as Left and Right where WASD is on, the enhanced and dev builds (they did not hand steering back until 2026-09-13); the 13k build has no WASD and folds to the code
-        (k == "ArrowLeft" || k == "ArrowRight" || k == "KeyA" || k == "KeyD") && (mouseMode = 0); // a steer key hands steering back to the keyboard; gas and boost keys work in either mode (the test was inverted until 2026-09-13: Left/Right kept mouse mode and Up cleared it)
+        mouseMode = 0; // any key hands control back to the keyboard (a steer key only until the post-deadline fix: a click to race from the menu left the pointer, parked over the list, steering full left off the grid; the test was inverted until 2026-09-13)
         // consume printable keys: Firefox otherwise opens find-as-you-type on WASD, and the
         // page would scroll on space. Ctrl combinations and F-keys stay with the browser
         e.key.length < 2 && !e.ctrlKey && e.preventDefault();
