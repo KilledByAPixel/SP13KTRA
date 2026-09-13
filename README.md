@@ -6,7 +6,7 @@ Race eight anti-gravity craft across eight spectral circuits in real 3D. Every c
 
 Created by Frank Force for JS13k 2026
 
-![SP13KTRA](cover.png)
+![SP13KTRA](cover.jpg)
 
 ## 🕹️ Controls
 
