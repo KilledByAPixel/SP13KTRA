@@ -449,8 +449,10 @@ function stepVehicle(v,c,dt)
     if(wall) v.heading+=clampAngle(info.heading-v.heading)*min(1,3*dt);
 
     // boost pad (roadType 1): within .95 of a lane of the pad's lane centre, just inside its drawn 1,400 (.45 inside 700 until
-    // 2026-09-13: hard to see and to hit, Frank), .5 s cooldown; a weak .8 s boost that never downgrades a held boost
-    if(t.roadType==1 && abs(v.localX-t.padX)<laneWidth*.95 && time>v.padTime+.5)
+    // 2026-09-13: hard to see and to hit, Frank), .3 s cooldown; a weak .8 s boost that never downgrades a held boost.
+    // The cooldown was .5 s until the post-deadline fix: the second pad of a pair (120 samples on, trackGen.js) comes .35-.55 s
+    // after the first at pad or turbo speed, so it gave no boost and no sound in 20 of 42 runs (local/pad-pair-probe.js)
+    if(t.roadType==1 && abs(v.localX-t.padX)<laneWidth*.95 && time>v.padTime+.3)
     {
         if(v.boostTime<time) v.boostPower=0;
         v.boostTime=max(v.boostTime,time+.8); v.padTime=time;
