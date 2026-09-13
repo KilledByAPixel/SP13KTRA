@@ -170,7 +170,7 @@ function gameUpdateInternal()
             if (keyWasPressed('Escape'))
                 menuMode = 0;
 
-            enhancedMode && (pick ||= keyWasPressed('ArrowDown') - keyWasPressed('ArrowUp')); // the arrow keys browse the menu in the dev and enhanced builds; the 13k build's menu is the mouse (2026-09-13: its arrow keys went for WASD, -11)
+            pick ||= keyWasPressed('ArrowDown') - keyWasPressed('ArrowUp'); // the arrow keys browse the menu in every build (the 13k build's went for WASD on 2026-09-13, -11, and came back in the post-deadline fixes once the any-key mouse-mode fix made room: a menu that only the mouse could browse)
             if (enhancedMode && isUsingGamepad) // the left stick, latched, browses the menu too (dev and enhanced builds, 2026-09-13); the d-pad is in it already (input.js copies it in: reading the buttons as well moved two rows)
             {
                 const s = gamepadStick(0), d = vec3(abs(s.x) > .5 ? sign(s.x) : 0, abs(s.y) > .5 ? sign(s.y) : 0);
@@ -193,7 +193,7 @@ function gameUpdateInternal()
                 }
             }
 
-            enhancedMode && (craft += keyWasPressed('ArrowRight') - keyWasPressed('ArrowLeft'));
+            craft += keyWasPressed('ArrowRight') - keyWasPressed('ArrowLeft');
             if (craft)
             {
                 // the craft, by Left/Right or a click on the TEAM button: one of the six band

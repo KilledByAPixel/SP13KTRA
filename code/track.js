@@ -195,7 +195,6 @@ function buildCourseWorld()
     skylineMesh.stored=1; skylineMesh.upload(); // stored: the vertices carry colour and glow
     // 63 road chunks of 64 samples, all drawn every frame, never culled: nothing pops, and 63 draws is nothing
     for(let first=0;first<N;first+=64) worldChunks.push(glBake(()=>buildRoadChunk(first,min(first+64,N))));
-    glSpecularity=glEmissive=0; glEnableFog=1; // leave the stream state clean for ordinary frames
     debug && ++worldBuildCount;
     worldKey=currentCircuit;
 }
@@ -287,7 +286,7 @@ function buildRoadChunk(first,end)
 
 function drawTrack()
 {
-    glSetDepthTest(); glEnableFog=glEnableLighting=1;
+    glSetDepthTest(); glEnableLighting=1;
     cubeMesh.render(groundMatrix,levelInfo.groundColor); // every circuit has a ground plane (the `ground` flag went on 2026-09-13: it was 1 on all nine)
     for(const c of worldChunks) c.render();
 }

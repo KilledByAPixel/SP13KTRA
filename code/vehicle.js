@@ -75,7 +75,7 @@ function makeCraftSpec(i)
         t: W*taper,                   // half trailing edge
         engines: 1+i%3,               // engine glow count
         tail: vec3(0, 40+H*.17, -L-30), // nozzle centroid (craft space): sparks AND the trail leave here
-        stations:
+        mesh: buildLoft(
         [
             // nose: a true point (top==bottom), so buildLoft's diagonal quad normal stays
             // non-degenerate there, unlike a corner normal
@@ -84,7 +84,7 @@ function makeCraftSpec(i)
             [-L*.24, W*.74, 40+H*.72, 40-H*.2],      // 62% back, under the canopy
             [L*(1-2*sweep), W, 40+H*.78, 40-H*.24],  // wingtips, the widest station
             [-L, W*taper, 40+H*.5, 40-H*.18],        // trailing edge
-        ],
+        ]),
     };
 }
 
@@ -478,7 +478,7 @@ function stepVehicle(v,c,dt)
         const lap=(v.gates-1)/8|0; // (gates is at least 1 here)
         if(lap>v.lap && v===playerVehicle)
         {
-            playerLap=lap; lapBeeps=3; // the checkpoint beep, three times (updateCars)
+            playerLap=lap; lap<raceLaps&&(lapBeeps=3); // the checkpoint beep, three times (updateCars), except on the finish: the first beep played under the finish sound (the finish is detected after the beeps below; the post-deadline fix)
         }
         v.lap=lap;
     }

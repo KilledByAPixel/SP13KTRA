@@ -47,7 +47,7 @@ function drawSky()
     glFogColor=levelInfo.skyColorBottom; // exactly the sky's horizon colour: a fogged ground edge vanishes into it
 
     // the sky has no depth and is never lit or fogged
-    glEnableLighting=glEnableFog=0;
+    glEnableLighting=0;
     glSetDepthTest(0,0);
     skyMesh.render(buildMatrix(cameraPos,vec3(0,cameraRot.y))); // the gradient turns with the camera's yaw only, so its horizon is the world's
     skyKitMesh.render(buildMatrix(cameraPos));        // the kit (sun, stars, clouds, eclipse) is baked in world orientation and only follows the camera's position

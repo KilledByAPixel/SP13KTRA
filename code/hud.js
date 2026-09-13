@@ -162,7 +162,7 @@ function drawHUD()
 
             // time top left; lap and circuit top right (the results card owns the final time)
             drawHUDText(formatTimeString(raceTime), edge(.035),.075, .045, WHITE, 'left');
-            drawHUDText('LAP '+min(playerLap+1,raceLaps)+'/'+raceLaps, edge(-.035),.075, .045, WHITE, 'right');
+            drawHUDText('LAP '+(playerLap+1)+'/'+raceLaps, edge(-.035),.075, .045, WHITE, 'right');
             drawHUDText(levelInfo.name, edge(-.035),.115, .028, band, 'right');
         }
     }
@@ -227,7 +227,6 @@ function drawLogo(x, y, s)
 // in the band after it at .36 of the size, both on the baseline y (0 draws nothing)
 function drawPlace(p, x, y, s)
 {
-    if (!p) return;
     drawHUDText(p, x, y, s, WHITE, 'right');
     drawHUDText(placeSuffix(p), x, y, s*.36, bandColor(), 'left');
 }
@@ -240,7 +239,7 @@ function drawPlace(p, x, y, s)
 // 13K). baseline: 'alphabetic' (the default) or 'middle' (the menu list: even spacing
 // whatever font a browser falls back to); shadow: the drop shadow's colour, black unless
 // given (the menu's selected name casts its circuit's colour)
-function drawHUDText(text, px, py, size=.05, color=WHITE, align='center', baseline='alphabetic', shadow)
+function drawHUDText(text, px, py, size, color=WHITE, align='center', baseline='alphabetic', shadow)
 {
     size *= mainCanvasSize.y; px *= mainCanvasSize.x; py *= mainCanvasSize.y; // (x, y as two fractions: a vec3 per call cost more)
     const context = mainContext;

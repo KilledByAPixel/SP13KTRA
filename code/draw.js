@@ -56,11 +56,7 @@ function drawInit()
 
     // one hull per racer colour (racerColors, vehicle.js makeCraftSpec), uploaded on its first render
     // like the cube and the canopy (Mesh.render uploads lazily): black is 6, white is 7
-    craftSpecs=racerColors.map((_,i)=>{
-        const s=makeCraftSpec(i);
-        s.mesh=buildLoft(s.stations);
-        return s;
-    });
+    craftSpecs=racerColors.map((_,i)=>makeCraftSpec(i));
 
     // bake the two glow fans (soft rim and flat disc) at unit size, so pushGlow outside
     // a bake is a single matrix draw instead of a fresh fan of stream vertices
