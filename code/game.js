@@ -104,7 +104,7 @@ function gameInit()
 function gameStart()
 {
     time=frame=frameTimeLastMS=frameTimeBufferMS=raceTime=playerLap=playerWin=0;
-    contactTimes=[]; // the craft-contact cooldowns (vehicle.js)
+    contactTimes=[]; lowBeepTime=lapBeepTime=0; // the craft-contact cooldowns and the sound timers (vehicle.js): the clock restarts at 0 each race, so a timer left over from the last race delayed the lap beeps to mid-lap and held back the low-energy tick (post-deadline fix, 2026-09-13)
     startCountdown=quickStart || titleScreenMode ? 0 : 4; // 3, 2, 1, GO
     levelInfo=testLevelInfo || levelInfoList[currentCircuit];
     gameOverTime=0;
