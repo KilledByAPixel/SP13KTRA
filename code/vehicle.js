@@ -215,27 +215,36 @@ class Racer extends Vehicle
 
 // Also drives the player on the title screen and under autodrive (testDrive), where
 // skill and lineOffset are missing: hence the || fallbacks.
+// rival tunables (2026-09-13 tries, Frank: rivals too easy): aiClip, the pace clip before the catch-up as a fraction of the
+// normal top speed (1 until then: no rival passed 32,000 on a straight unless well behind); aiCornerSlow, the pace cut per
+// unit of the sharpest turn ahead (.2 until then); aiCornerBrake, speed times turn that brakes (24,000 until then; a player
+// only lifts); aiBoostGap, how far behind the player a rival holds its free turbo (8,000 until then; 4,000 crowded him to death);
+// aiLine, how much of the racing line a rival follows (.35 until then: it cut every corner tighter than the road allows). A solo
+// time trial at skill 1 (local/ai-corner-trial.js) chose .08, 34,000 and .7 over .15, 30,000 and .35: REDSHIFT 48.0 to 47.0 s,
+// ULTRAVIOLET 56.1 to 51.4, UMBRA 65.7 to 62.4 (3 wall hits from 0), SP13KTRA 65.4 to 63.0; with no corner brake it died on UMBRA
+const aiClip=1.05, aiCornerSlow=.08, aiCornerBrake=34000, aiBoostGap=5000, aiLine=.7;
 function driveAI(v)
 {
     const info=new TrackSegmentInfo(v.s), seg=info.segmentIndex;
     const look=1800+v.speed*.16; // route units of lookahead, growing with speed
 
     // lateral aim: the nearest reachable pad, else the racing line plus this rival's lane
-    let x=padSeekX(seg,v.localX) ?? (trackRacingLine[seg]*.35+(v.lineOffset||0));
+    let x=padSeekX(seg,v.localX) ?? (trackRacingLine[seg]*aiLine+(v.lineOffset||0));
     let targetSpeed=maxCraftSpeed*(v.skill||.96)*levelInfo.rivalSkill;
 
     // the sharpest curvature over the next 100 segments sets the corner pace
     let corner=0;
     for(let k=0;k<100;k+=10) corner=max(corner,abs(track[wrapSegment(seg+k)].turn));
-    targetSpeed*=clamp(1-corner*.2,.35,1); // a 10,000 radius (turn 2.5) halves the pace
+    targetSpeed*=clamp(1-corner*aiCornerSlow,.35,1); // at .08 a 10,000 radius (turn 2.5) takes a fifth off the pace
     if(v.racerIndex==currentCircuit) targetSpeed*=1.04;
 
-    // catch-up changes the target pace only, never position: .95-1.1 over a 20k gap
+    // catch-up changes the target pace only, never position: .95-1.1 over a 40k gap (a 20k gap until 2026-09-13: each
+    // rival settles where the catch-up cancels its skill, so the gentler slope sets the field twice as far apart, Frank)
     // (the player's own gap is 0: a factor of 1)
     const gap=playerVehicle.raceDistance-v.raceDistance;
     // the pace is clipped to the normal top speed BEFORE the catch-up, so a rival well behind can run past it
     // (clipped after, in stepVehicle, until 2026-09-13: the rubber band could never close on a player on the turbo)
-    targetSpeed=min(targetSpeed,maxCraftSpeed)*clamp(1+gap/200000,.95,1.1);
+    targetSpeed=min(targetSpeed,maxCraftSpeed*aiClip)*clamp(1+gap/400000,.95,1.1);
 
     // traffic: swerve a lane away from a craft close ahead and do not ram it
     for(const other of vehicles)
@@ -245,7 +254,7 @@ function driveAI(v)
         if(ahead>0 && ahead<3400 && abs(side)<650 && raceTime>2) // not in the first two seconds off the grid
         {
             x=clamp(v.localX+(side>0?-900:900),-info.w+700,info.w-700);
-            if(ahead<1000 && v.speed>other.speed) targetSpeed=min(targetSpeed,other.speed*.98);
+            if(ahead<1000 && abs(side)<300 && v.speed>other.speed) targetSpeed=min(targetSpeed,other.speed*.98); // only a craft squarely ahead holds a rival back; one beside it is passed (2026-09-13 try: rivals trailed a coasting player)
         }
     }
 
@@ -255,14 +264,14 @@ function driveAI(v)
     // brake when well over pace, or when too fast for the corner ahead: the turning radius is the speed,
     // a turn of 1 is a 25,000 radius, so speed*turn over 25,000 runs wide (a fixed 16,500 into corners
     // under 15,000 until 2026-09-13; the brake only slows a rival: the slide it started went with the player's)
-    const brake=v.speed>targetSpeed+1350 || v.speed*corner>24000;
+    const brake=v.speed>targetSpeed+1350 || v.speed*corner>aiCornerBrake;
     // full gas with the target as a CAP: gas on-off around the target made the engines
-    // flutter; the cap holds the pace and the glow steady. A rival 8,000 or more behind holds
+    // flutter; the cap holds the pace and the glow steady. A rival aiBoostGap or more behind holds
     // the same boost the player has, at no energy cost (the player's gap is 0)
     // lift off the gas into a corner the steer rate cannot hold at this speed (at 1 rad/s the turning
     // radius is the speed): off the gas a rival turns at coastSteer, the player's own trick (without the slide, rivals ran wide
     // into ULTRAVIOLET's 22,000 corners and exploded, 2026-09-13; the lift's margin lets the brake wait)
-    return {steer,gas:v.speed*corner<21000,cap:targetSpeed,brake,boost:gap>8000}
+    return {steer,gas:v.speed*corner<21000,cap:targetSpeed,brake,boost:gap>aiBoostGap}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
