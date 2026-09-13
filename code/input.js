@@ -79,9 +79,10 @@ function inputInit()
 
     onkeyup = (e)=>
     {
-        inputData[e.code] = 4; // released (the held bit drops with it)
+        inputData[e.code] = inputData[e.code]&2|4; // released (the held bit drops with it), keeping a press from this same step: a tap
+        // whose down and up both landed before the next step read as never pressed (a quick Space or Escape on a slow frame; 2026-09-13)
         if (inputWASDEmulateDirection)
-            inputData[remapKey(e.code)] = 4;
+            inputData[remapKey(e.code)] = inputData[remapKey(e.code)]&2|4;
     }
 
     onmousemove = (e)=> (mouseX = e.clientX/innerWidth*2-1, mouseY = e.clientY/innerHeight); // vehicle.js scales x by 3 and clamps: full lock a third of the way out
