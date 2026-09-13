@@ -85,7 +85,7 @@ function inputInit()
     }
 
     onmousemove = (e)=> (mouseX = e.clientX/innerWidth*2-1, mouseY = e.clientY/innerHeight); // vehicle.js scales x by 3 and clamps: full lock a third of the way out
-    onmousedown = (e)=> { e.preventDefault(); mouseButtons |= 1<<e.button; mouseMode = 1; e.button || (mousePressed = 1); }; // preventDefault: a middle click no longer starts the browser's autoscroll (the middle button brakes) // any click: the pointer steers from now on, button or not
+    onmousedown = (e)=> { e.button && e.preventDefault(); mouseButtons |= 1<<e.button; mouseMode = 1; e.button || (mousePressed = 1); }; // preventDefault: a middle click no longer starts the browser's autoscroll (the middle button brakes) // any click: the pointer steers from now on, button or not
     onmouseup = (e)=> mouseButtons &= ~(1<<e.button);
     oncontextmenu = (e)=> e.preventDefault(); // the right button is the boost
     // losing focus stops the engine loop at once: a hidden tab gets no animation frames, so the
