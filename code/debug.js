@@ -34,11 +34,22 @@ let downloadLink, debugMesh, debugCapture, debugCanvas;
 // no placing is recorded
 function debugSkip(d)
 {
+    playerVehicle.place(playerVehicle.s + d*lapDistance/4);
+    debugCatchGates();
+}
+
+// after any dev relocation: the gates catch up with the player's route position (both ways) and the lap follows, with
+// the lap beeps when it moves on to a new lap. Every relocation needs it: the 3/4 creep moved the craft past gates
+// without counting them, so the next gate stayed behind and no gate or lap counted for the rest of the race, and a
+// skip over the line counted the lap in silence (2026-09-13). The run is poisoned for records
+function debugCatchGates()
+{
     const v = playerVehicle;
-    v.place(v.s + d*lapDistance/4);
     while (v.s >= v.nextGate) ++v.gates, v.nextGate += lapDistance/8;
     while (v.gates && v.s < v.nextGate-lapDistance/8) --v.gates, v.nextGate -= lapDistance/8;
-    v.lap = playerLap = max(0, Math.floor((v.gates-1)/8));
+    const lap = max(0, Math.floor((v.gates-1)/8));
+    if (lap > playerLap) lapBeeps = 3;
+    v.lap = playerLap = lap;
     debugSkipped = 1;
 }
 
@@ -232,7 +243,7 @@ function debugUpdate()
         {
             playerVehicle.place(...freeCamRestore);
             startCountdown = 0;
-            debugSkipped = 1;
+            debugCatchGates();
             freeCamRestore = 0;
         }
         if (!freeCamStarted)
@@ -273,7 +284,7 @@ function debugUpdate()
         // held: creep along the route 1,000 route units a frame
         const v = keyIsDown('Digit4') ? 1e3 : -1e3;
         playerVehicle.place(playerVehicle.s+v);
-        debugSkipped = 1;
+        debugCatchGates();
     }
     if (keyWasPressed('Digit5'))
         showMap = !showMap;
