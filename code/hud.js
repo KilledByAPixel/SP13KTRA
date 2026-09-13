@@ -51,8 +51,8 @@ function drawMap()
     ctx.stroke();
 
     // craft, from real world X/Z: every craft a small dot in its colour, then the player
-    // on top as a big dot in ITS colour inside a white ring (always red before, which is
-    // the red rival once you pick another craft)
+    // on top as a bigger dot in ITS colour (always red before, which is the red rival once you
+    // pick another craft; a white ring around it hid the rivals just behind, and went on 2026-09-13, Frank)
     const dot = (v, r, color)=>
     {
         ctx.fillStyle = color;
@@ -62,7 +62,6 @@ function drawMap()
     };
     for(const v of vehicles)
         dot(v, 3*q, v.color);
-    dot(playerVehicle, 8*q, WHITE);
     dot(playerVehicle, 5*q, playerVehicle.color);
 }
 
