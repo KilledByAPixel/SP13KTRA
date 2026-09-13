@@ -267,7 +267,7 @@ function buildRoadChunk(first,end)
         glEmissive=5; // emissive + PULSE (webgl.js): the pads flash toward white
         // (the corner warning used to be a band across the road here; it looked bad on the
         // surface, so it is a trackside arrow now: buildScenery)
-        if(t.roadType==1) strip(t.padX-350,t.padX+350,rgb(1,1,0),15); // a boost pad, 700 wide on its lane
+        if(t.roadType==1) strip(t.padX-700,t.padX+700,rgb(1,1,0),15); // a boost pad, 1,400 wide on its lane (700 until 2026-09-13: hard to see and to hit, Frank)
         glEmissive=9; // SPECTRUM: one white strip becomes the moving rainbow in the shader
         if(t.roadType==2) strip((w-150)*t.padX,(w-levelInfo.stripWidth)*t.padX,WHITE,15); // the recharge strip, on its padX side (trackGen.js)
         glEmissive=0;
