@@ -244,7 +244,7 @@ function driveAI(v)
     const gap=playerVehicle.raceDistance-v.raceDistance;
     // the pace is clipped to the normal top speed BEFORE the catch-up, so a rival well behind can run past it
     // (clipped after, in stepVehicle, until 2026-09-13: the rubber band could never close on a player on the turbo)
-    targetSpeed=min(targetSpeed,maxCraftSpeed*aiClip)*clamp(1+gap/400000,.95,1.1);
+    targetSpeed=min(targetSpeed,maxCraftSpeed*aiClip)*clamp(1+gap/400000,.98,1.1);
 
     // traffic: swerve a lane away from a craft close ahead and do not ram it
     for(const other of vehicles)
