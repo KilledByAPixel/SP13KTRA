@@ -232,7 +232,9 @@ function gameUpdateInternal()
         }
         if (keyWasPressed('Escape') || enhancedMode && isUsingGamepad && gamepadWasPressed(8))
         {
-            // go back to title screen
+            // go back to title screen; after a win the enhanced build advances like Space does (the 13k build
+            // leaves Escape on the same circuit, the unlock and records already saved; 2026-09-13)
+            enhancedMode && playerWin && (currentCircuit = (currentCircuit+1)%circuitCount, writeSaveData());
             sound_charge.play();
             titleScreenMode = 1;
             gameStart();
