@@ -125,7 +125,13 @@ function gameStart()
         vehicles.push(new Racer(slotZ(s),slotX(s),i));
     }
     if(titleScreenMode) // attract mode: the field spread down the road a fifth of a lap in, for the camera to look at
+    {
         for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000-i*750,slotX(i));
+        // a warm-up: three seconds of the attract race run before the first frame, so a circuit picked in the menu opens on a
+        // field already at speed with its trails, not parked in a line (Frank, 2026-09-13). The clock runs on from there.
+        // Enhanced build only: in the 13k build it cost 28 bytes
+        if(enhancedMode) for(;frame<180;) time=frame++/frameRate, updateCars();
+    }
     if(debug) debugSkipped=0; // a fresh race can set a record again
     cameraRot.y=playerVehicle.heading;
     for(let i=99;i--;) updateCamera(); // run the camera's easing to rest so the first frame is seated
