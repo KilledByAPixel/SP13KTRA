@@ -215,9 +215,8 @@ function glRender()
 {
     if(glCapture || !glBatchCount) return;
     glBind(glStream);
-    const data=glVertexData.subarray(0,glBatchCount*12);
-    glContext.bufferSubData(gl_ARRAY_BUFFER,0,data);
-    debug && (glUploadBytes+=data.byteLength);
+    glContext.bufferSubData(gl_ARRAY_BUFFER,0,glVertexData,0,glBatchCount*12);
+    debug && (glUploadBytes+=glBatchCount*48);
     glDraw(glStream,glBatchCount,new DOMMatrix,WHITE,1);
     glBatchCount=0;
 }
