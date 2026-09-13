@@ -95,7 +95,7 @@ class LevelInfo
         this.rainbow = level>6; // circuitCount-1 (game.js, which loads later)
         this.laneCount = 3+(level<2);
         this.bankAmp = .5+level*.08;      // bank = bankAmp*turn, clamped to +-.5 (trackGen.js)
-        this.rivalSkill = 1.03+level*.011; // AI pace scale (vehicle.js); at .84+.018/level the player led every race untouched, and at .95 still well clear in the first laps (2026-09-13)
+        this.rivalSkill = 1.09+level*.011; // AI pace scale (vehicle.js); at .84+.018/level the player led every race untouched, and at .95 still well clear in the first laps (2026-09-13)
         this.padWait = .7+level*.1;       // scales the gap between pad pairs (trackGen.js)
         this.stripWidth = 3500-min(2100,level*420); // the recharge strip: five lanes wide on REDSHIFT, narrowing to two by ULTRAVIOLET, so the first charges come easy
 
