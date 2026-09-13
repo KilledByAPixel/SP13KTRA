@@ -353,7 +353,7 @@ function stepVehicle(v,c,dt)
         v.deadUntil=time+2;
         v.velocity=vec3();
         v.speed=0;
-        if(racing(v))
+        if(racing(v) && !gameOverTime) // not after the finish: a scrape while coasting turned a finish into OUT (2026-09-13)
         {
             sound_lose.play(.7);
             lastRacePlace=fieldSize;
