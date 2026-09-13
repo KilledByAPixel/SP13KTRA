@@ -346,14 +346,14 @@ function stepVehicle(v,c,dt)
             for(let i=60;i--;) updateCamera();
         }
     }
-    if(v.energy<=0)
+    if(v.energy<=0 && !(racing(v) && gameOverTime)) // the player cannot die after the finish (2026-09-13)
     {
         // death: the explosion (drawTrails), two seconds stopped, then the respawn above.
         // The player's death ends the race: the results card, dead last on the next grid
         v.deadUntil=time+2;
         v.velocity=vec3();
         v.speed=0;
-        if(racing(v) && !gameOverTime) // not after the finish: a scrape while coasting turned a finish into OUT (2026-09-13)
+        if(racing(v))
         {
             sound_lose.play(.7);
             lastRacePlace=fieldSize;
