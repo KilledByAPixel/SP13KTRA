@@ -91,7 +91,7 @@ function inputInit()
     oncontextmenu = (e)=> e.preventDefault(); // the right button is the boost
     // losing focus stops the engine loop at once: a hidden tab gets no animation frames, so the
     // per-frame focus check in updateVehicles never ran and the loop played on
-    onblur = ()=> { engineSound && (engineSound.stop(), engineSound = 0); musicStop(); enhancedMode && (inputData = [], mouseButtons = 0); }; // the enhanced build also drops held input: the loop stops here, so inputUpdate's focus check never ran and a key held while switching away stayed held (2026-09-13; about 10 bytes in the 13k build). A 13k focus pause here (paused = 1, and onfocus clearing it) worked and went for size, +19
+    onblur = ()=> { engineSound && (engineSound.stop(), engineSound = 0); musicStop(); inputData = [], mouseButtons = 0; }; // held input drops too: the loop stops here, so inputUpdate's focus check never ran and a key held while switching away stayed held (the enhanced build only until the post-deadline fix, +7 in the 13k build). A 13k focus pause here (paused = 1, and onfocus clearing it) worked and went for size, +19
 
     // WASD to the arrows
     const remapKey = (c) => inputWASDEmulateDirection ?
