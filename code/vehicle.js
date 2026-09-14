@@ -258,7 +258,7 @@ function driveAI(v)
     {
         if(other===v) continue;
         const d=other.pos.subtract(v.pos), ahead=d.dot(v.forward), side=d.dot(info.right);
-        if(ahead>0 && ahead<3400 && abs(side)<650 && raceTime>2) // not in the first two seconds off the grid
+        if(ahead>0 && ahead<3400 && abs(side)<650 && time>5) // not in the first two seconds off the grid: GO lands at time 3 (raceTime>2 until the post-deadline fix, but raceTime only runs in a race, so the title and menu's attract field never avoided traffic and rammed itself)
         {
             x=clamp(v.localX+(side>0?-900:900),-info.w+700,info.w-700);
             if(ahead<1000 && abs(side)<300 && v.speed>other.speed) targetSpeed=min(targetSpeed,other.speed*.98); // only a craft squarely ahead holds a rival back; one beside it is passed (2026-09-13 try: rivals trailed a coasting player)
