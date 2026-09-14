@@ -20,7 +20,7 @@ let showMap = 1; // dev toggle (debug.js, 5 key); always on in the release
 function drawMap()
 {
     // trackMapPts (track.js) is the loop in real world space, one [x,z] every 8 segments
-    if (!showMap || !trackMapPts || titleScreenMode && !menuMode || gameOverTime) // the title shows only its logo; the results card stands alone
+    if (!showMap || titleScreenMode && !menuMode || gameOverTime) // the title shows only its logo; the results card stands alone
         return;
     const ctx = mainContext, W = mainCanvasSize.x, H = mainCanvasSize.y;
     // fit the loop to a box about a quarter of the window height (a fixed 130px was tiny on

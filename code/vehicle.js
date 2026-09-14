@@ -344,7 +344,7 @@ function stepVehicle(v,c,dt)
         // attract lap's player craft) respawns at the last gate passed with half energy and
         // a fresh trail
         if(time<v.deadUntil || racing(v)) return;
-        v.place(v.nextGate-lapDistance/8,0);
+        v.place(v.nextGate-lapDistance/8);
         v.energy=50;
         v.deadUntil=0;
         v.trail=[];
@@ -407,10 +407,10 @@ function stepVehicle(v,c,dt)
 
     // grip: bleed the sideways component of velocity at gripNormal per second, then put
     // gripKeep of the speed that took back along the new direction
-    const side=v.velocity.dot(right), sp=v.velocity.mag();
+    const side=v.velocity.dot(right);
     v.velocity=v.velocity.subtract(right.scale(side*(1-Math.exp(-gripNormal*dt))));
     const m=v.velocity.mag();
-    if(m) v.velocity=v.velocity.scale(lerp(gripKeep,m,sp)/m);
+    if(m) v.velocity=v.velocity.scale(lerp(gripKeep,m,speed)/m);
 
     // held boost: 25 energy/s for the player (a rival's catch-up boost is free: rivals never charge, so wanting 50
     // energy spent every rival's boost in the first lap, 2026-09-13), full power. It never drains the last unit: at 1
