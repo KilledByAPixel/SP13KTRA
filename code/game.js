@@ -266,6 +266,7 @@ function gameUpdateInternal()
 
 function gameUpdate(frameTimeMS=0)
 {
+    requestAnimationFrame(gameUpdate); // first (last until the post-deadline fix): an exception anywhere in a frame then costs that frame, not the game
     if (!clampAspectRatios)
         mainCanvasSize = vec3(mainCanvas.width=innerWidth, mainCanvas.height=innerHeight); // the 13k build: the canvas is the window
     else
@@ -370,7 +371,6 @@ function gameUpdate(frameTimeMS=0)
     drawScene();
     drawHUD();
     debug && debugDraw();
-    requestAnimationFrame(gameUpdate);
 }
 
 ///////////////////////////////
