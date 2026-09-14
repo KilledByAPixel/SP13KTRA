@@ -80,10 +80,17 @@ const devCommands = {
     places: 'random best placings and best times',
     finish: 'finish the race now: the lap count completes and the real finish path runs, as a skip',
     regions: 'show the UI click regions (the menu rows) on/off',
+    touch: 'the touch gamepad without a touch screen on/off, remembered across reloads: it shows in a race, driven by the mouse',
 };
 let showRegions = 0;
 function dev() { devSet(!devMode); return 'dev mode ' + (devMode ? 'on: the dev keys work' : 'off'); }
 function regions() { showRegions = !showRegions; return 'regions ' + (showRegions ? 'on' : 'off'); }
+function touch() // touch.js reads SP13KTOUCH at load; the pad appears at the next step of a race
+{
+    touchForce = !touchForce;
+    touchForce ? localStorage.SP13KTOUCH = 1 : delete localStorage.SP13KTOUCH;
+    return 'touch gamepad ' + (touchForce ? 'forced on: it shows in a race' : 'off without a touch screen');
+}
 
 // the click regions, as game.js tests them (hud.js calls this under debug && showRegions)
 function drawRegions()
@@ -91,7 +98,10 @@ function drawRegions()
     const ctx = mainContext, W = mainCanvasSize.x, H = mainCanvasSize.y;
     ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1;
     for (let c = 0; c <= circuitCount; ++c) // row circuitCount is the TEAM button
-        ctx.strokeRect(menuRowX()*W, (menuRowY(c)-menuRowSize(c)*.45)*H, ((menuRowW[c]+1)/2-menuRowX())*W, menuRowSize(c)*.9*H);
+    {
+        const x0 = getAspect() < 1 && c == circuitCount ? (1-menuRowW[c])/2 : menuRowX(); // the portrait menu's TEAM is centred (menuRowAt)
+        ctx.strokeRect(x0*W, (menuRowY(c)-menuRowSize(c)*.45)*H, ((menuRowW[c]+1)/2-x0)*W, menuRowSize(c)*.9*H);
+    }
 }
 
 function quick()

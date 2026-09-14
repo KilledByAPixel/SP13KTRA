@@ -22,7 +22,8 @@
 // Mouse: a click enters mouse mode, in which the pointer steers by how far it sits from
 // the centre of the window whether or not a button is held; the left button drives,
 // right boosts, a click starts. Any key returns to keyboard mode.
-// Touch is deferred until it is designed.
+// Touch (dev and enhanced builds): the on-screen touch gamepad in touch.js fills pad 0 in a race;
+// elsewhere a tap is a click. The menu's own touch design is still to come.
 const gamepadsEnable = enhancedMode;
 const inputWASDEmulateDirection = enhancedMode; // WASD doubles as the arrows (folded out of the 13k build)
 
@@ -133,6 +134,9 @@ function gamepadsUpdate()
             v < -min ? -percent(-v, min, max) : 0;
         return clampLength(vec3(deadZone(v.x), deadZone(-v.y))); // browser sticks are y-down; flip to y-up
     }
+
+    if (touchUpdate()) // the on-screen touch pad owns pad 0 while it is in use (touch.js)
+        return;
 
     if (!navigator || !navigator.getGamepads)
         return;
