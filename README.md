@@ -38,10 +38,4 @@ Finish a race to unlock the next circuit. Explode and you race it again.
 - A live minimap of the real circuit with every racer on it.
 - Your best placing and best time saved for every circuit.
 
-> ⬜🟥🟧🟨🟩🟦🟪⬛
-
-> **WHITE UNICORN. 🦄**
-
-> *Drink the whole spectrum.*
-
-> ⬜🟥🟧🟨🟩🟦🟪⬛
+![SP13KTRA](whiteUnicorn.jpg)
