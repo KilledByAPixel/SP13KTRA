@@ -337,7 +337,7 @@ function gameUpdate(frameTimeMS=0)
     }
     debug && (averageFPS = lerp(.05, averageFPS, 1e3/(frameTimeDeltaMS||1))); // dev readout only
     frameTimeBufferMS += paused ? 0 : frameTimeDeltaMS;
-    frameTimeBufferMS = min(frameTimeBufferMS, 50); // slow framerate: about three catch-up steps at most, then the game slows rather than spirals
+    frameTimeBufferMS = min(frameTimeBufferMS, 42); // slow framerate: three catch-up steps at most, then the game slows rather than spirals. 42, not 50 (until the post-deadline fix): after any stall, every gameStart included, 50 ran exactly three steps and left the buffer ON the one-or-two-steps boundary, so 60 Hz frame times rounded to .1 ms froze and doubled a third of the frames; 42 leaves it mid-frame (local/step-pacing-sim.js)
 
     // update multiple frames if necessary in case of slow framerate
     for (;frameTimeBufferMS >= 0; frameTimeBufferMS -= 1e3/frameRate)
