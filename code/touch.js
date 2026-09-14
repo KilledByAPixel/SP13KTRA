@@ -41,17 +41,35 @@ const touchHud = () => touchDevice || touchForce;
 // still not running, is closed and replaced by a fresh one made inside this gesture; a suspended one is asked first (a desktop
 // browser's first gesture). The music then starts again from the top (its clock was the old context's) and the engine loop restarts
 let touchAudioAsked;
+// A DEAD CLOCK: iOS can come back from the interruption saying 'running' with a clock that never moves again and no sound (Frank's
+// #audio readout, 2026-09-14: interrupted, suspended, running on its own, and silence, the clock stopped where the lock left it, so
+// the wake above never ran). touchAudioWatch, every step, notes when the clock last moved; running but still for half a second of
+// steady frames is dead, and the next touch replaces it too. A frame gap over .2 s (a hidden page gets no frames) or any other state
+// restarts the watch, so a page coming back is not called dead before its clock has had its chance
+let touchAudioTime = 0, touchAudioMoved = 0, touchAudioSampled = 0, touchAudioDead = 0;
+function touchAudioWatch()
+{
+    const a = audioContext, now = performance.now();
+    if (!a)
+        return;
+    if (a.currentTime != touchAudioTime || now - touchAudioSampled > 200 || a.state != 'running')
+        touchAudioTime = a.currentTime, touchAudioMoved = now, touchAudioDead = 0;
+    else if (!touchAudioDead && now - touchAudioMoved > 500)
+        touchAudioDead = 1, debug && audioDiagNote('clock stuck');
+    touchAudioSampled = now;
+}
 function touchAudioWake()
 {
     const a = audioContext;
-    if (a && a.state == 'running')
+    if (a && a.state == 'running' && !touchAudioDead)
         return;
-    if (!a || a.state == 'interrupted' || touchAudioAsked == a)
+    if (!a || a.state != 'suspended' || touchAudioAsked == a) // interrupted, or running with a dead clock, or asked already
     {
+        debug && audioDiagNote('wake: replaced ' + (a ? a.state + (touchAudioDead ? ' dead' : '') : 'none'));
         a && a.close().catch(()=>0);
         audioContext = new AudioContext;
-        musicSource = musicEpoch = engineSound = 0;
-        debug && audioDiagNote('wake: replaced ' + (a ? a.state : 'none'));
+        musicSource = musicEpoch = engineSound = touchAudioDead = 0;
+        touchAudioMoved = performance.now();
     }
     else
     {
@@ -232,6 +250,7 @@ function touchUp(e)
 // writes pad 0. Returns 1 when the pad owns pad 0 (the real gamepads are not polled then)
 function touchUpdate()
 {
+    touchDevice && touchAudioWatch();
     if (!touchHud() || titleScreenMode || gameOverTime)
     {
         if (touchOverlay && touchOverlay.style.display != 'none')

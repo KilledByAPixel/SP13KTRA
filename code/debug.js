@@ -343,12 +343,17 @@ function debugDraw()
         const a = audioContext;
         if (a && a != audioDiagContext)
             audioDiagNote('context made'), (audioDiagContext = a).addEventListener('statechange', () => audioDiagNote('state ' + a.state));
+        // short lines in big text: Frank could barely read the first version on his phone
         const lines = [
-            'audio ' + (a ? a.state + ' t ' + a.currentTime.toFixed(1) + ' ' + a.sampleRate : 'none'),
-            'focus ' + document.hasFocus() + ' ' + document.visibilityState + ' session ' + (navigator.audioSession ? navigator.audioSession.type : '-'),
-            'music ' + !!musicSource + ' volume ' + soundVolume + ' muted ' + musicMuted,
+            (a ? a.state + ' t ' + a.currentTime.toFixed(1) : 'no audio') + (touchDevice ? touchAudioDead ? ' STUCK' : ' moving' : ''),
+            'focus ' + +document.hasFocus() + ' ' + document.visibilityState,
+            'session ' + (navigator.audioSession ? navigator.audioSession.type : '-') + ' ' + (a ? a.sampleRate : ''),
+            'music ' + +!!musicSource + ' vol ' + soundVolume + ' mute ' + +musicMuted,
             ...audioDiagLog];
-        lines.forEach((s, i) => drawHUDText(s, .02, .3 + i*.03, .022, WHITE, 'left'));
+        const size = .032/(titleScreenMode ? 1 : min(1, getAspect())); // drawHUDText shrinks race text on a portrait window: undo it
+        mainContext.fillStyle = '#000c'; // a dark box behind it: the menu names showed through
+        mainContext.fillRect(0, mainCanvasSize.y*.23, mainCanvasSize.x, mainCanvasSize.y*lines.length*.036 + mainCanvasSize.y*.01);
+        lines.forEach((s, i) => drawHUDText(s, .02, .25 + i*.036, size, WHITE, 'left'));
     }
 
     // fps / vertices / draw calls / craft count, hidden from screenshots
