@@ -123,7 +123,7 @@ function drawHUD()
     }
     else
     {
-        if (time < 4 && !quickStart)
+        if (time < 4 && !quickStart && startCountdown < 4) // under 4: a race started from the menu draws its first frame before the first countdown step, so a full-size 4 flashed for a frame (the post-deadline fix)
         {
             // count down over the full HUD: the numbers white, GO in the band, each fading over its second
             const c = startCountdown ? WHITE : band, f = 1-time%1; // f: each numeral's remaining second
