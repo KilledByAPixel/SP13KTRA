@@ -205,8 +205,10 @@ function gameUpdateInternal()
                 cameraRot.y = playerVehicle.heading;
                 for(let i=60;i--;) updateCamera();
                 // the warm-up settles the camera on its target with the craft frozen, but in
-                // motion the .22 position ease trails the target by about 2.3 frames of travel,
+                // motion the position ease trails the target by about 2.3 frames of travel,
                 // so the camera then fell back over a dozen frames (measured): start it at that lag
+                // (measured at .22 and again at .3, the post-deadline ease: the camera then moves 9 units
+                // over the next 40 frames, against 112 at 2.6 and 275 at 1.6; local/camera-setback-probe.js)
                 cameraPos.addSelf(playerVehicle.velocity.scale(-timeDelta*2.3));
                 writeSaveData(); // the craft choice is saved
             }
@@ -420,7 +422,7 @@ function updateCamera()
     target.addSelf(info.right.scale(x-r.x));
     target.y=max(target.y,surface.y);
 
-    cameraPos=cameraPos.lerp(target,.22);                        // position ease
+    cameraPos=cameraPos.lerp(target,.3);                        // position ease
     cameraRot.x=lerp(.12,cameraRot.x,.26+info.pitch*.5);         // look down .26 rad plus half the road's pitch (positive pitch = descending, track.js)
     cameraRot.z=lerp(.08,cameraRot.z,-Math.atan(info.roll)*.3);  // roll with 30% of the road's bank
 

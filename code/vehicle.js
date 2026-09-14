@@ -33,7 +33,7 @@ let contactTimes=[], engineSound, keySteer=0, lowBeepTime=0, lapBeeps=0, lapBeep
 // steer toward the key (lower = a softer ramp), steerRate the heading rate in rad/s,
 // gripNormal the per-second bleed of sideways velocity (14 was on rails,
 // 8 lets every corner drift a touch, 4 is a boat)
-const keySteerEase=.12, steerRate=1, gripNormal=8;
+const keySteerEase=.15, steerRate=1, gripNormal=8;
 
 // the steer rate off the gas or on the brake (every craft) and the player's on the turbo, as fractions
 // of steerRate: some corners are tighter than the rate, so letting go turns faster, and the turbo
