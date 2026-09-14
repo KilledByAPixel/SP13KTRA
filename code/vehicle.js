@@ -531,7 +531,12 @@ function updateCars()
             // was too twitchy); the mouse below is direct
             keySteer=lerp(keySteerEase,keySteer,(keyIsDown('ArrowRight')|keyIsDown('KeyD'))-(keyIsDown('ArrowLeft')|keyIsDown('KeyA'))); // W, A and D beside the arrows in every build (2026-09-13: reading the keys here is far smaller than the enhanced build's remap in the 13k build, +63)
             c={steer:keySteer,gas:keyIsDown('ArrowUp')|keyIsDown('KeyW'),brake:keyIsDown('Space'),boost:keyIsDown('ShiftLeft')}; // Space brakes, left Shift is the turbo (Down and Space until 2026-09-13: Down cannot be held with the steer keys, Frank)
-            // mouse mode (a click enters it, any key leaves it, input.js): the pointer steers
+            // the gas key hands steering back to the keys, before the mouse steer applies (the post-deadline fixes: a click to
+            // race from the menu left the pointer parked over the list, steering full left off the grid; any key did it in
+            // input.js for a day, so Space ended mouse mode and a mouse player could not brake on it, Frank 2026-09-14; the gas
+            // and steer keys priced 6 over, and a keyboard player always gasses to go)
+            mouseMode &= !c.gas;
+            // mouse mode (a click enters it, the gas key leaves it): the pointer steers
             // by its distance from centre even with no button held (full lock a third of the
             // way out); left drives, right is the turbo, middle brakes (a plain slow-down since the drift went on 2026-09-13;
             // a right-button brake with the turbo on Space alone lasted an hour; an automatic gas was

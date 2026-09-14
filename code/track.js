@@ -220,7 +220,7 @@ function buildRoadChunk(first,end)
         // a strip from lateral x1 to x2 between the two frames, `lift` above the surface; the normal is always the frame's up
         const strip=(x1,x2,color,lift=0)=>{const n=a.up;glPush([a.point(x2,lift),a.point(x1,lift),b.point(x2,lift),b.point(x1,lift)],[n,n,n,n],color);};
         const w=a.w, ac=levelInfo.archColor;
-        glSpecularity=.35; glEmissive=0;
+        glSpecularity=.35;
 
         // The surface: two strips per side to follow the berm's quadratic rise and a flat centre
         // cut at every lane edge, where an 18-wide piece IS the lane line: a third emissive and a
@@ -242,19 +242,18 @@ function buildRoadChunk(first,end)
             glEmissive=isLine?.35:0;
             strip(cuts[k-1],cuts[k],isLine?line:road);
         }
-        glEmissive=0;
 
         // the rough shoulder (roadType 3, trackGen.js): the outer two and a half lanes on the padX side carry
         // bright white dashes, one every other 4-sample panel, lifted 8 (two grey lifts of the road
         // were too faint to read at speed)
-        if(t.roadType==3 && i&4) glEmissive=.5, strip(t.padX*w*bermStart,t.padX*(w*bermStart-2.5*laneWidth),WHITE,8), glEmissive=0;
+        if(t.roadType==3 && i&4) glEmissive=.5, strip(t.padX*w*bermStart,t.padX*(w*bermStart-2.5*laneWidth),WHITE,8);
 
         // Solid wall inner faces (240 tall, facing the road) with a continuous emissive
         // light rail along the top: the readable edge at speed.
         for(const side of [-1,1])
         {
             const x=side*w, normal=a.right.scale(-side), lo=120-120*side, hi=240-lo; // the left wall lists its points top first, so both walls face inward
-            glPush([a.point(x,lo),a.point(x,hi),b.point(x,lo),b.point(x,hi)],[normal,normal,normal,normal],ac.lerp(BLACK,.72));
+            glEmissive=0; glPush([a.point(x,lo),a.point(x,hi),b.point(x,lo),b.point(x,hi)],[normal,normal,normal,normal],ac.lerp(BLACK,.72));
             // the rail: the wall-light strip along the wall's top, lifted 22 above it (12 until it doubled in width on 2026-09-13: the wall's edge peeked through again) so the wall's
             // edge never pokes through it on a twisted panel (a pulse like the pads' was too busy)
             glEmissive=.65; strip(x-70,x+70,i%48<24?WHITE:levelInfo.rainbow?hsl(i/240,1,.6):levelInfo.edgeColor,262); glEmissive=0; // dashed: white for 24 samples, the band for 24, the road shade's rhythm (2026-09-13); on the finale the band sweeps the hues like its tunnel

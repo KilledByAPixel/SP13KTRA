@@ -64,7 +64,7 @@ function inputInit()
     onkeydown = (e)=>
     {
         enhancedMode && (isUsingGamepad = 0); // any key press hands control back to the keyboard
-        mouseMode = 0; // any key hands control back to the keyboard (a steer key only until the post-deadline fix: a click to race from the menu left the pointer, parked over the list, steering full left off the grid; the test was inverted until 2026-09-13)
+        // (mouse mode ends on the gas key, where the race reads it: vehicle.js. Any key ended it here for a day, Space too, so a mouse player braking on Space lost the mouse steer, Frank 2026-09-14)
         // consume printable keys: Firefox otherwise opens find-as-you-type on WASD, and the
         // page would scroll on space. Ctrl combinations and F-keys stay with the browser
         e.key.length < 2 && !e.ctrlKey && e.preventDefault();
