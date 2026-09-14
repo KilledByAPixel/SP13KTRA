@@ -224,7 +224,7 @@ function drawLogo(x, y, s)
 
 // every placing in the game (the race corner, the results card, the menu's BEST) through
 // one call, so they read the same: the numeral white and right-aligned at x, its ordinal
-// in the band after it at .36 of the size, both on the baseline y (0 draws nothing)
+// in the band after it at .36 of the size, both on the baseline y (every caller passes 1-8: the 0 guard went in a size cut)
 function drawPlace(p, x, y, s)
 {
     drawHUDText(p, x, y, s, WHITE, 'right');

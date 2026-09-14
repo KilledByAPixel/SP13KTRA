@@ -245,7 +245,7 @@ function driveAI(v)
     targetSpeed*=clamp(1-corner*aiCornerSlow,.35,1); // at .08 a 10,000 radius (turn 2.5) takes a fifth off the pace
     if(v.racerIndex==currentCircuit) targetSpeed*=1.04;
 
-    // catch-up changes the target pace only, never position: .95-1.1 over a 40k gap (a 20k gap until 2026-09-13: each
+    // catch-up changes the target pace only, never position: .98-1.1 over a 40k gap (a 20k gap until 2026-09-13: each
     // rival settles where the catch-up cancels its skill, so the gentler slope sets the field twice as far apart, Frank)
     // (the player's own gap is 0: a factor of 1)
     const gap=playerVehicle.raceDistance-v.raceDistance;
@@ -271,7 +271,10 @@ function driveAI(v)
     // brake when well over pace, or when too fast for the corner ahead: the turning radius is the speed,
     // a turn of 1 is a 25,000 radius, so speed*turn over 25,000 runs wide (a fixed 16,500 into corners
     // under 15,000 until 2026-09-13; the brake only slows a rival: the slide it started went with the player's)
-    const brake=v.speed>targetSpeed+1350 || v.speed*corner>aiCornerBrake;
+    // (the over-pace brake waits while a boost runs: since the brake cuts boost thrust (the post-deadline fix), it cancelled a
+    // rival's own pad and catch-up boosts, topping them near 32,500 and 35,500 instead of 39,000 and 40,000, with brake and thrust
+    // flipping every step; local/rival-boost-probe.js. Removing the over-pace brake outright crashed rivals: 12 deaths, rival-brake-trial)
+    const brake=v.boostTime<time&&v.speed>targetSpeed+1350 || v.speed*corner>aiCornerBrake;
     // full gas with the target as a CAP: gas on-off around the target made the engines
     // flutter; the cap holds the pace and the glow steady. A rival aiBoostGap or more behind holds
     // the same boost the player has, at no energy cost (the player's gap is 0)
@@ -462,7 +465,7 @@ function stepVehicle(v,c,dt)
     if(wall) v.heading+=clampAngle(info.heading-v.heading)*min(1,3*dt);
 
     // boost pad (roadType 1): within .95 of a lane of the pad's lane centre, just inside its drawn 1,400 (.45 inside 700 until
-    // 2026-09-13: hard to see and to hit, Frank), .3 s cooldown; a weak .8 s boost that never downgrades a held boost.
+    // 2026-09-13: hard to see and to hit, Frank), .3 s cooldown; an .8 s boost (to 39,000 at the turbo's thrust since the post-deadline tuning) that never downgrades a held boost.
     // The cooldown was .5 s until the post-deadline fix: the second pad of a pair (120 samples on, trackGen.js) comes .35-.55 s
     // after the first at pad or turbo speed, so it gave no boost and no sound in 20 of 42 runs (local/pad-pair-probe.js)
     if(t.roadType==1 && abs(v.localX-t.padX)<laneWidth*.95 && time>v.padTime+.3)
