@@ -184,7 +184,7 @@ function glPreRender(size)
         projection=new DOMMatrix([size.y/size.x/h,0,0,0, 0,1/h,0,0, 0,0,2e-6,0, 0,0,-1,1]);
     }
     glContext.uniformMatrix4fv(glUniform('m'),false,
-        projection.multiply(buildMatrix(cameraPos,cameraRot).inverse()).toFloat32Array());
+        projection.multiply(buildMatrix(cameraPos,cameraRot).rotateSelf(cameraRoll).inverse()).toFloat32Array()); // the roll last, so about the camera's own view axis (one argument: rotateSelf turns about Z)
     glContext.uniform4f(glUniform('e'),cameraPos.x,cameraPos.y,cameraPos.z,time);
 }
 

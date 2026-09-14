@@ -63,7 +63,7 @@ let trackSeed = 1331; // the world's random seed: every circuit is preset
 ///////////////////////////////
 // game variables
 
-let cameraPos, cameraRot;
+let cameraPos, cameraRot, cameraRoll=0; // cameraRoll: the bank lean in DEGREES, applied on the view matrix only (webgl.js)
 let track, vehicles, playerVehicle; // vehicles[0] is the player at a race start (the menu's craft pick swaps the reference)
 
 ///////////////////////////////
@@ -424,17 +424,18 @@ function updateCamera()
 
     cameraPos=cameraPos.lerp(target,.3);                        // position ease
     cameraRot.x=lerp(.12,cameraRot.x,.26+info.pitch*.5);         // look down .26 rad plus half the road's pitch (positive pitch = descending, track.js)
-    cameraRot.z=lerp(.08,cameraRot.z,-Math.atan(info.roll)*.3);  // roll with 30% of the road's bank
+    cameraRoll=lerp(.08,cameraRoll,-Math.atan(info.roll)*19);  // roll with a third of the road's bank, in degrees (19 of 57.3; .3 before the post-deadline fix, tuned while the roll was wrong on half the corners; 17 and 18 built a byte or two bigger, 19 the same as 17.2). Until the post-deadline fix it was cameraRot.z, which buildMatrix turns about WORLD Z after the yaw: right facing +Z, the wrong way facing -Z, a nod facing +-X; glPreRender now rolls the view matrix in camera space (local/roll-axis-probe.js)
 
     if(freeCamMode)
     {
         cameraPos=freeCamPos.copy();
         cameraRot=freeCamRot.copy();
+        cameraRoll=0; // the free camera does not lean with the player's bank
     }
     if(topDownMode) // the dev map view (debug.js): 500k straight up over the loop's centre plus the pan; glPreRender goes orthographic
     {
         cameraPos=trackMapCenter.add(topDownPan).addSelf(vec3(0,5e5,0));
-        cameraRot=vec3(PI/2,0,0); // pitch only: vec3(s) is (s,s,s)
+        cameraRot=vec3(PI/2,0,0); cameraRoll=0; // pitch only: vec3(s) is (s,s,s)
     }
 }
 
