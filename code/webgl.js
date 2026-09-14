@@ -117,6 +117,7 @@ function glInit()
     glVertexData = new Float32Array(gl_MAX_BATCH*12);
 
     glSetAdditive(0); // blending itself follows the depth mask: glSetDepthTest
+    glContext.enable(gl_DEPTH_TEST); // always on: the sky draws first after the depth clear, well inside the far plane, and writes no depth
     // no back-face culling: the road is seen from below where it twists away, so everything
     // is double sided. Winding hides nothing; lighting uses the explicit normals, so a back
     // face simply reads unlit
@@ -249,9 +250,9 @@ function glSetAdditive(on) { glContext.blendFunc(gl_SRC_ALPHA,on?1:gl_ONE_MINUS_
 // triangles' shared edge each part-covers a pixel and the background blends through; an
 // opaque write simply overwrites. The road, scenery and hulls are alpha 1 anyway (the .9
 // wall rail becomes solid, which is fine)
-function glSetDepthTest(test=1,write=1)
+function glSetDepthTest(write=1)
 {
-    test?glContext.enable(gl_DEPTH_TEST):glContext.disable(gl_DEPTH_TEST); glContext.depthMask(!!write);
+    glContext.depthMask(!!write);
     write?glContext.disable(gl_BLEND):glContext.enable(gl_BLEND);
 }
 

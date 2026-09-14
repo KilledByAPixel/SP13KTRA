@@ -48,7 +48,7 @@ function drawSky()
 
     // the sky has no depth and is never lit or fogged
     glEnableLighting=0;
-    glSetDepthTest(0,0);
+    glSetDepthTest(0);
     skyMesh.render(buildMatrix(cameraPos,vec3(0,cameraRot.y))); // the gradient turns with the camera's yaw only, so its horizon is the world's
     skyKitMesh.render(buildMatrix(cameraPos));        // the kit (sun, stars, clouds, eclipse) is baked in world orientation and only follows the camera's position
 } // drawTrack, next, sets depth, fog and lighting back

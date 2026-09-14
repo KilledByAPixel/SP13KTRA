@@ -358,7 +358,7 @@ function drawTrails()
 
 function drawTrackScenery()
 {
-    glSetDepthTest(1,0); glEnableLighting=0; glSetAdditive(1); // depth tested but never written: light never occludes light
+    glSetDepthTest(0); glEnableLighting=0; glSetAdditive(1); // depth tested but never written: light never occludes light
     drawTrails();
     glSetAdditive(0);
 }
