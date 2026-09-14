@@ -390,7 +390,11 @@ function stepVehicle(v,c,dt)
     // the steer multiplier: the player turns coastSteer times faster off the gas and turboSteer on the
     // turbo, eased over steerEase; ANY craft on the brake or off the gas turns at coastSteer (a rival, or the
     // player's craft when the AI drives it behind the title)
-    const mul=c.brake?coastSteer:c.boost&&v===playerVehicle?turboSteer:c.gas?1:coastSteer;
+    // the turbo is on while its button is down OR inside a press's committed window (boostPower, below), and only while it
+    // can run (energy over 1): the steer and the boost both follow it (the steer followed the button alone until the
+    // post-deadline fix: a tap boosted on without the turbo's steer, and an empty turbo steered like a running one)
+    const turbo=(c.boost || v.boostPower>time) && v.energy>1;
+    const mul=c.brake?coastSteer:turbo&&v===playerVehicle?turboSteer:c.gas?1:coastSteer;
     rate*=v===playerVehicle?steerMul=lerp(dt/steerEase,steerMul,mul):mul;
     v.heading+=c.steer*rate*dt;
     // never backwards: the nose stays within 90 degrees of the road's heading at the
@@ -409,13 +413,16 @@ function stepVehicle(v,c,dt)
     if(m) v.velocity=v.velocity.scale(lerp(gripKeep,m,sp)/m);
 
     // held boost: 25 energy/s for the player (a rival's catch-up boost is free: rivals never charge, so wanting 50
-    // energy spent every rival's boost in the first lap, 2026-09-13), full power, with a short release tail. It never drains the
-    // last unit: at 1 the turbo just stops, and only a wall or a craft can finish you
-    if(c.boost && v.energy>1)
+    // energy spent every rival's boost in the first lap, 2026-09-13), full power. It never drains the last unit: at 1
+    // the turbo just stops, and only a wall or a craft can finish you. A PRESS COMMITS .5 s (Frank, the post-deadline
+    // fix): boostPower holds the end of that window (any non-zero value is a turbo's power), and inside it the turbo
+    // runs and drains as if held (.1 felt like a tap, .5 a decision). Until then a free .12 s tail followed every step the button was down, so tapping
+    // one step in eight kept full power for an eighth of the energy
+    if(turbo)
     {
-        v.energy=max(1,v.energy-25*dt*(v==playerVehicle)); v.boostPower=1;
-        if(v.boostTime<time) racing(v) && sound_boost.play(.5);
-        v.boostTime=max(v.boostTime,time+.12);
+        v.energy=max(1,v.energy-25*dt*(v==playerVehicle));
+        if(v.boostTime<time || !v.boostPower) racing(v) && sound_boost.play(.5), v.boostPower=time+.5; // a press: no boost, or a pad's
+        v.boostTime=max(v.boostTime,time+.02); // one step on: no free tail
     }
 
     // speed caps: normal 32,000 (or the AI's target, c.cap); pads 36,000; held boost 40,000
