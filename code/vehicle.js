@@ -233,9 +233,15 @@ function driveAI(v)
     let x=padSeekX(seg,v.localX) ?? (trackRacingLine[seg]*aiLine+(v.lineOffset||0));
     let targetSpeed=maxCraftSpeed*(v.skill||.96)*levelInfo.rivalSkill;
 
-    // the sharpest curvature over the next 100 segments sets the corner pace
+    // the sharpest curvature over the next 300 segments, each weighted down by its distance (1-k/400: a turn 280 on counts
+    // .3), sets the corner pace, the lift and the corner brake. Until the post-deadline tuning it was the plain sharpest over
+    // 100 segments, about 13,000 units, too late to slow from 32,000 for a hairpin: rivals and the autodrive hit the outside
+    // wall of UMBRA's hairpins nearly every lap and of SP13KTRA's (100 samples at turn 2.5) every lap, Frank. A plain longer
+    // scan saw them but slowed every corner on every circuit; the weight brakes early only for the sharpest. A solo trial
+    // (local/ai-corner-trial.js ROUND=7) went from 12 wall hits to 0 over all eight circuits at the same total time, 421 to 423 s,
+    // with the lift moved from 21,000 to 24,000 (local/sp13ktra-hairpin-trace.js: the steer was at full lock, the speed too high)
     let corner=0;
-    for(let k=0;k<100;k+=10) corner=max(corner,abs(track[wrapSegment(seg+k)].turn));
+    for(let k=0;k<300;k+=20) corner=max(corner,abs(track[wrapSegment(seg+k)].turn)*(1-k/400));
     targetSpeed*=clamp(1-corner*aiCornerSlow,.35,1); // at .08 a 10,000 radius (turn 2.5) takes a fifth off the pace
     if(v.racerIndex==currentCircuit) targetSpeed*=1.04;
 
@@ -272,7 +278,7 @@ function driveAI(v)
     // lift off the gas into a corner the steer rate cannot hold at this speed (at 1 rad/s the turning
     // radius is the speed): off the gas a rival turns at coastSteer, the player's own trick (without the slide, rivals ran wide
     // into ULTRAVIOLET's 22,000 corners and exploded, 2026-09-13; the lift's margin lets the brake wait)
-    return {steer,gas:v.speed*corner<21000,cap:targetSpeed,brake,boost:gap>aiBoostGap}
+    return {steer,gas:v.speed*corner<24000,cap:targetSpeed,brake,boost:gap>aiBoostGap} // the lift at 24,000 (21,000 until the post-deadline tuning, with the longer corner scan)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
