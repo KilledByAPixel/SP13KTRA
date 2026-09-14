@@ -34,6 +34,41 @@ let touchFingers = {}, touchIdleTime = 0;
 // the race HUD makes room for the pad wherever it can show (hud.js reads this behind enhancedMode)
 const touchHud = () => touchDevice || touchForce;
 
+// iOS audio (Safari's engine, so Chrome on an iPhone too): locking the phone or leaving the page INTERRUPTS the audio context, and
+// iOS lets a page start audio only inside a gesture, often not even resume() there: the frame loop's retries in playSamples never
+// count, and the pad's press was the only resume in a gesture, so after an unlock no sound came back ever (Frank, 2026-09-14, an
+// iPhone in Chrome). Every touch on a touch device checks: an interrupted context, or one a gesture already asked to resume that is
+// still not running, is closed and replaced by a fresh one made inside this gesture; a suspended one is asked first (a desktop
+// browser's first gesture). The music then starts again from the top (its clock was the old context's) and the engine loop restarts
+let touchAudioAsked;
+function touchAudioWake()
+{
+    const a = audioContext;
+    if (a && a.state == 'running')
+        return;
+    if (!a || a.state == 'interrupted' || touchAudioAsked == a)
+    {
+        a && a.close().catch(()=>0);
+        audioContext = new AudioContext;
+        musicSource = musicEpoch = engineSound = 0;
+    }
+    else
+        a.resume(), touchAudioAsked = a;
+}
+touchDevice && addEventListener('touchend', touchAudioWake, true);
+
+// iOS sends a tap's compatibility mouse events after the finger lifts, whatever pointerdown prevented, and by then a press that
+// leaves the race (TITLE, or the last touch before the results) has hidden the pad, so the mousedown landed on the title as a
+// click and opened the menu straight away (Frank, 2026-09-14: TITLE put him right back in). A mousedown within a second of a touch
+// that began on the pad is dropped before input.js's onmousedown sees it; a touch that begins anywhere else clears that
+let touchPadTouchEnd = 0; // performance.now() when the last touch that began on the pad lifted (Infinity while it is down), else 0
+if (touchDevice)
+{
+    addEventListener('touchstart', e => touchPadTouchEnd = touchOverlay && touchOverlay.contains(e.target) ? Infinity : 0, true);
+    addEventListener('touchend', () => touchPadTouchEnd &&= performance.now(), true);
+    addEventListener('mousedown', e => performance.now() - touchPadTouchEnd < 1e3 && e.stopPropagation(), true);
+}
+
 // the controls for the current state in window pixels; S, a thumb's reach, scales with the window's short side
 function touchLayout(W, H)
 {
@@ -121,8 +156,7 @@ function touchDown(e)
     touchOverlay.setPointerCapture(e.pointerId);
     touchFingers[e.pointerId] = 1;
     isUsingGamepad = touchUsed = 1;
-    audioContext ||= new AudioContext; // iOS starts audio only inside the gesture itself
-    audioContext.resume();
+    touchAudioWake();
     const p = vec3(e.clientX, e.clientY), c = touchHit(p);
     if (!c)
         return;
@@ -135,8 +169,20 @@ function touchDown(e)
 
 function touchMove(e)
 {
-    const c = touchRoles[e.pointerId];
-    c && c.stick && touchApplyStick(c, vec3(e.clientX, e.clientY));
+    const c = touchRoles[e.pointerId], p = vec3(e.clientX, e.clientY);
+    if (!c)
+        return;
+    if (c.stick)
+        return touchApplyStick(c, p);
+    // a thumb on a button slides onto another without lifting (Frank, 2026-09-14: GAS up onto TURBO, or across to BRAKE; a press
+    // was locked to its first button). Off every button it keeps the last; the pause buttons are never slid onto
+    const n = touchHit(p);
+    if (n && n != c && !n.stick && !n.fade && !paused)
+    {
+        delete touchButtons[c.button];
+        touchRoles[e.pointerId] = n;
+        touchButtons[n.button] = 1;
+    }
 }
 
 function touchUp(e)
