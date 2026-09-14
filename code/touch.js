@@ -51,9 +51,13 @@ function touchAudioWake()
         a && a.close().catch(()=>0);
         audioContext = new AudioContext;
         musicSource = musicEpoch = engineSound = 0;
+        debug && audioDiagNote('wake: replaced ' + (a ? a.state : 'none'));
     }
     else
+    {
         a.resume(), touchAudioAsked = a;
+        debug && audioDiagNote('wake: resume');
+    }
 }
 touchDevice && addEventListener('touchend', touchAudioWake, true);
 
@@ -64,6 +68,32 @@ touchDevice && addEventListener('touchend', touchAudioWake, true);
 let touchPadTouchEnd = 0; // performance.now() when the last touch that began on the pad lifted (Infinity while it is down), else 0
 if (touchDevice)
 {
+    // iOS's long-press magnifier, text selection and callout (Frank, 2026-09-14), stopped the way LittleJS does: no selection or
+    // callout on the page, no browser touch gestures, and every touch's default prevented, so the browser makes no mouse events
+    // of its own. A touch off the pad goes to input.js's mouse handlers instead (the first finger: a tap on the title, the menu
+    // and the results is still a click, and mouse mode stays as it was, so a tap never steers the race); a touch that began on
+    // the pad is the pad's (its pointer events), even once the pad has hidden under it. Unfocused, the default is kept, as
+    // LittleJS keeps it: it gives the page focus, and the browser's own mouse events make the click
+    document.documentElement.style.cssText += ';user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none';
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel'])
+        document.addEventListener(type, e =>
+        {
+            if (!e.cancelable || !document.hasFocus())
+                return;
+            e.preventDefault();
+            if (touchOverlay && touchOverlay.contains(e.target))
+                return;
+            onmousemove(e.changedTouches[0]);
+            if (type == 'touchstart' && e.touches.length == 1)
+            {
+                const m = mouseMode;
+                onmousedown({button: 0, preventDefault: ()=>0});
+                mouseMode = m;
+            }
+            else if (type != 'touchmove' && !e.touches.length)
+                onmouseup({button: 0});
+        }, {passive: false});
+
     addEventListener('touchstart', e => touchPadTouchEnd = touchOverlay && touchOverlay.contains(e.target) ? Infinity : 0, true);
     addEventListener('touchend', () => touchPadTouchEnd &&= performance.now(), true);
     addEventListener('mousedown', e => performance.now() - touchPadTouchEnd < 1e3 && e.stopPropagation(), true);
