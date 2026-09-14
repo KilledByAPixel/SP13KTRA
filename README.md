@@ -6,6 +6,10 @@ Race eight anti-gravity craft across eight spectral circuits in real 3D. Every c
 
 Created by Frank Force for JS13k 2026
 
+Created by Frank Force for JS13k 2026
+
+## 🌈 [▶ Play SP13KTRA](https://killedbyapixel.github.io/SP13KTRA/)
+
 ![SP13KTRA](cover.jpg)
 
 ## 🕹️ Controls
@@ -27,7 +31,7 @@ Finish a race to unlock the next circuit. Explode and you race it again.
 - White dashed shoulders are rough and slow you down, unless you turbo over them.
 - Let go of the gas to turn harder.
 
-## 🌈 Features
+## 🦄 Features
 
 - Eight circuits and eight rival craft, one colour of the spectrum each.
 - WebGL 3D rendering, lighting and fog, all generated from code.
