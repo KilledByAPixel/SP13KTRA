@@ -323,38 +323,10 @@ function toggleFreeCam()
 ///////////////////////////////////////////////////////////////////////////////
 // draw: the readout, screenshots and scratch renders
 
-// the AUDIO READOUT (2026-09-14): open the page with #audio on the end of its address (a phone has no console) and the corner
-// shows the audio context's state and clock, focus, visibility, iOS's audio session, the music source, and the last page and
-// audio events. Frank's iPhone (Chrome, so WebKit) had no sound after a lock, even after a reload, and replacing the context in a
-// tap did not bring it back: this is the evidence for the next step
-const audioDiag = location.hash.includes('audio'), audioDiagLog = [];
-let audioDiagContext;
-const audioDiagNote = s => audioDiag && audioDiagLog.push((performance.now()/1e3).toFixed(1) + ' ' + s) > 9 && audioDiagLog.shift();
-for (const type of ['blur', 'focus', 'pagehide', 'pageshow', 'visibilitychange'])
-    addEventListener(type, () => audioDiagNote(type + (type == 'visibilitychange' ? ' ' + document.visibilityState : '')), true);
-
 function debugDraw()
 {
     if (!debug)
         return;
-
-    if (audioDiag)
-    {
-        const a = audioContext;
-        if (a && a != audioDiagContext)
-            audioDiagNote('context made'), (audioDiagContext = a).addEventListener('statechange', () => audioDiagNote('state ' + a.state));
-        // short lines in big text: Frank could barely read the first version on his phone
-        const lines = [
-            (a ? a.state + ' t ' + a.currentTime.toFixed(1) : 'no audio') + (touchDevice ? touchAudioDead ? ' STUCK' : ' moving' : ''),
-            'focus ' + +document.hasFocus() + ' ' + document.visibilityState,
-            'session ' + (navigator.audioSession ? navigator.audioSession.type : '-') + ' ' + (a ? a.sampleRate : ''),
-            'music ' + +!!musicSource + ' vol ' + soundVolume + ' mute ' + +musicMuted,
-            ...audioDiagLog];
-        const size = .032/(titleScreenMode ? 1 : min(1, getAspect())); // drawHUDText shrinks race text on a portrait window: undo it
-        mainContext.fillStyle = '#000c'; // a dark box behind it: the menu names showed through
-        mainContext.fillRect(0, mainCanvasSize.y*.23, mainCanvasSize.x, mainCanvasSize.y*lines.length*.036 + mainCanvasSize.y*.01);
-        lines.forEach((s, i) => drawHUDText(s, .02, .25 + i*.036, size, WHITE, 'left'));
-    }
 
     // fps / vertices / draw calls / craft count, hidden from screenshots
     if (debugInfo && !debugCapture)

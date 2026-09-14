@@ -55,7 +55,7 @@ function touchAudioWatch()
     if (a.currentTime != touchAudioTime || now - touchAudioSampled > 200 || a.state != 'running')
         touchAudioTime = a.currentTime, touchAudioMoved = now, touchAudioDead = 0;
     else if (!touchAudioDead && now - touchAudioMoved > 500)
-        touchAudioDead = 1, debug && audioDiagNote('clock stuck');
+        touchAudioDead = 1;
     touchAudioSampled = now;
 }
 function touchAudioWake()
@@ -65,7 +65,6 @@ function touchAudioWake()
         return;
     if (!a || a.state != 'suspended' || touchAudioAsked == a) // interrupted, or running with a dead clock, or asked already
     {
-        debug && audioDiagNote('wake: replaced ' + (a ? a.state + (touchAudioDead ? ' dead' : '') : 'none'));
         a && a.close().catch(()=>0);
         audioContext = new AudioContext;
         musicSource = musicEpoch = engineSound = touchAudioDead = 0;
@@ -74,7 +73,6 @@ function touchAudioWake()
     else
     {
         a.resume(), touchAudioAsked = a;
-        debug && audioDiagNote('wake: resume');
     }
 }
 touchDevice && addEventListener('touchend', touchAudioWake, true);
