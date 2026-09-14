@@ -431,11 +431,11 @@ function stepVehicle(v,c,dt)
         v.boostTime=max(v.boostTime,time+.02); // one step on: no free tail
     }
 
-    // speed caps: normal 32,000 (or the AI's target, c.cap); pads 36,000; held boost 40,000
-    const boosted=v.boostTime>time, cap=boosted?(v.boostPower?40000:36000):c.cap||maxCraftSpeed;
+    // speed caps: normal 32,000 (or the AI's target, c.cap); pads 39,000 with the turbo's 20,000 thrust (36,000 and 13,500 until the post-deadline tuning, Frank: pads felt weak, barely faster than the gas; 38,000 with 20,000 built over the limit); held boost 40,000
+    const boosted=v.boostTime>time, cap=boosted?(v.boostPower?40000:39000):c.cap||maxCraftSpeed;
     // the brake cuts the gas AND any boost (a boost's thrust ignored the brake until the post-deadline fix, so braking
     // after a pad or on the turbo still gained speed: 13,500 or 20,000 of thrust against the brake's 10,500)
-    let accel=c.brake?0:boosted?(v.boostPower?20000:13500):c.gas?9600:0; // units/s^2
+    let accel=c.brake?0:boosted?(v.boostPower?20000:20000):c.gas?9600:0; // units/s^2
     if(speed>=cap) accel=0;
     v.velocity.addSelf(v.forward.scale(accel*dt));
     // deceleration (units/s^2): the brake 10,500, coasting 1,000 (2,700 before: a release
