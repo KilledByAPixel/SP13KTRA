@@ -126,7 +126,10 @@ function gameStart()
     }
     if(titleScreenMode) // attract mode: the field spread down the road a fifth of a lap in, for the camera to look at
     {
-        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000-i*750,slotX(i));
+        // the player craft (vehicles[0]) starts at the BACK (80000-i*750 until the post-deadline fix: once the traffic rule worked in the
+        // menu, rivals held back behind a player craft started in front, and it led the field 68% of the time; reversed it sits in the
+        // pack, 3.7 of 8 and never in front, local/attract-order-probe.js START=1; a lower autodrive skill built over the limit)
+        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000+i*750,slotX(i));
         // a warm-up: three seconds of the attract race run before the first frame, so a circuit picked in the menu opens on a
         // field already at speed with its trails, not parked in a line (Frank, 2026-09-13). The clock runs on from there.
         // Enhanced build only: in the 13k build it cost 28 bytes
