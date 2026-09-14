@@ -448,7 +448,6 @@ function stepVehicle(v,c,dt)
 
     // short moves (80 units, at most 16 of them) keep containment continuous even at
     // boosts and lap seams
-    const before=v.s;
     const steps=min(16,max(1,Math.ceil(newSpeed*dt/80)));
     let wall=0;
     for(let i=0;i<steps;++i)
@@ -487,8 +486,11 @@ function stepVehicle(v,c,dt)
         v.velocity=v.velocity.scale(1-1.5*dt), racing(v) && (bumpDistance-=v.speed*dt)<0 && (bumpDistance=3e3*(1+Math.random()/2), sound_slowBump.play(clamp(v.speed/32e3)));
 
     // ordered gates are route metadata. Teleporting/debug placement is not a lap: a gate
-    // only counts when crossed forward within 1,500 route units in one step
-    if(before<v.nextGate && v.s>=v.nextGate && v.s-before<1500)
+    // only counts while the craft is past it by under 1,500 route units. (Until the post-deadline fix it counted only
+    // when this step STARTED short of it, but checkCraftContacts re-seats both craft after their steps, which moves s:
+    // a nudge from just short of a gate to just past it skipped that gate, and so every later one, for good. A rival's
+    // laps froze; the player's race could never finish)
+    if(v.s>=v.nextGate && v.s-v.nextGate<1500)
     {
         ++v.gates; v.nextGate+=lapDistance/8;
         const lap=(v.gates-1)/8|0; // (gates is at least 1 here)
