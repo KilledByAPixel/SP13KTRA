@@ -318,7 +318,9 @@ function drawHUDText(text, px, py, size, color=WHITE, align='center', baseline='
         size *= min(1, getAspect());
     size *= mainCanvasSize.y; px *= mainCanvasSize.x; py *= mainCanvasSize.y; // (x, y as two fractions: a vec3 per call cost more)
     const context = mainContext;
-    context.font = `900 ${size}px arial,sans-serif`;
+    // enhanced: Archivo Black, embedded by font.js (phones have no Arial Black, and fell back to a lighter bold of their own; one weight
+    // only, so no 900, which would fake a bolder one); the 13k build folds this to its arial 900 (Frank, 2026-09-15)
+    context.font = enhancedMode ? `${size}px "Archivo Black",arial,sans-serif` : `900 ${size}px arial,sans-serif`;
     context.textAlign = align;
     context.textBaseline = baseline;
     context.fillStyle = shadow || rgb(0,0,0,color.a); // (a falsy shadow is the black default)

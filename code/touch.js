@@ -136,7 +136,7 @@ function touchInit()
     const o = touchOverlay = document.createElement('div');
     o.style.cssText = 'position:fixed;inset:0;z-index:9;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none';
     touchSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    touchSvg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.5;font-family:sans-serif;font-weight:bold';
+    touchSvg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.5;font-family:"Archivo Black",sans-serif'; // the HUD's embedded font (font.js), one weight
     o.appendChild(touchSvg);
     o.onpointerdown = touchDown;
     o.onpointermove = touchMove;
