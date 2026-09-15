@@ -32,7 +32,7 @@ let autoFullscreen = 0;
 // setup
 const laneWidth = 700;             // the road half-width is laneWidth*1.6*laneCount (trackGen.js); pads sit on lane centres
 const trackSegmentLength = 100;    // route units per segment: s advances 100 per sample
-let cameraBoomZ = 1200; // pulled back: smaller craft, more road, speed reads better (eases out on a boost: updateCamera)
+const cameraBoomZ = 1200; // pulled back: smaller craft, more road, speed reads better (eases out on a boost: updateCamera)
 // the starting grid: fieldSize staggered slots, pole nearest the line, one row per slot
 const slotZ = s => 2400 - s*520;
 const slotX = s => (s%2?1:-1)*800;
@@ -404,7 +404,7 @@ function updateCamera()
 {
     const v=playerVehicle;
     const boost=v.boostTime>time;
-    cameraBoomZ=lerp(.08,cameraBoomZ,boost?1500:1200); // the boom eases out 300 units on a boost
+    //cameraBoomZ=lerp(.08,cameraBoomZ,boost?1200:1200); // the boom eases out 300 units on a boost
     boostFov=lerp(.1,boostFov,boost); // the lens widens on a boost (glPreRender)
 
     // the camera follows the travel direction with a 30% lean toward the nose, so a
