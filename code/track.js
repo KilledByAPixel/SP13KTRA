@@ -337,7 +337,7 @@ function drawTrails()
             // too; now it is bigger and brighter in the craft's colour)
             const color=v.racerIndex==7?hsl(j/8+time/3,1,.65):v.glowColor.lerp(WHITE,fade*.1);
             color.a=fade;
-            const right=t[1].scale((50+100*boost)*(.5+.5*v.throttle)); // half width: triple under boost, half off the gas, a quarter on the brake (throttle -.5; none at -1 until 2026-09-13)
+            const right=t[1].scale((50+75*boost)*(.5+.5*v.throttle)); // half width: triple under boost, half off the gas, a quarter on the brake (throttle -.5; none at -1 until 2026-09-13)
             if(last)
                 glPush([last[0].add(last[1]),last[0].subtract(last[1]),p.add(right),p.subtract(right)],0,color);
             last=[p,right];

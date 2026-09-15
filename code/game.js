@@ -32,7 +32,7 @@ let autoFullscreen = 0;
 // setup
 const laneWidth = 700;             // the road half-width is laneWidth*1.6*laneCount (trackGen.js); pads sit on lane centres
 const trackSegmentLength = 100;    // route units per segment: s advances 100 per sample
-let cameraBoomZ = 2000; // pulled back: smaller craft, more road, speed reads better (eases out on a boost: updateCamera)
+let cameraBoomZ = 1200; // pulled back: smaller craft, more road, speed reads better (eases out on a boost: updateCamera)
 // the starting grid: fieldSize staggered slots, pole nearest the line, one row per slot
 const slotZ = s => 2400 - s*520;
 const slotX = s => (s%2?1:-1)*800;
@@ -126,10 +126,7 @@ function gameStart()
     }
     if(titleScreenMode) // attract mode: the field spread down the road a fifth of a lap in, for the camera to look at
     {
-        // the player craft (vehicles[0]) starts at the BACK (80000-i*750 until the post-deadline fix: once the traffic rule worked in the
-        // menu, rivals held back behind a player craft started in front, and it led the field 68% of the time; reversed it sits in the
-        // pack, 3.7 of 8 and never in front, local/attract-order-probe.js START=1; a lower autodrive skill built over the limit)
-        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000+i*750,slotX(i));
+        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000-i*750,slotX(i));
         // a warm-up: three seconds of the attract race run before the first frame, so a circuit picked in the menu opens on a
         // field already at speed with its trails, not parked in a line (Frank, 2026-09-13). The clock runs on from there.
         // Enhanced build only: in the 13k build it cost 28 bytes
@@ -407,7 +404,7 @@ function updateCamera()
 {
     const v=playerVehicle;
     const boost=v.boostTime>time;
-    cameraBoomZ=lerp(.08,cameraBoomZ,boost?2300:2000); // the boom eases out 300 units on a boost
+    cameraBoomZ=lerp(.08,cameraBoomZ,boost?1500:1200); // the boom eases out 300 units on a boost
     boostFov=lerp(.1,boostFov,boost); // the lens widens on a boost (glPreRender)
 
     // the camera follows the travel direction with a 30% lean toward the nose, so a
@@ -425,7 +422,7 @@ function updateCamera()
     target.addSelf(info.right.scale(x-r.x));
     target.y=max(target.y,surface.y);
 
-    cameraPos=cameraPos.lerp(target,.3);                        // position ease
+    cameraPos=cameraPos.lerp(target,.5);                        // position ease
     cameraRot.x=lerp(.12,cameraRot.x,.26+info.pitch*.5);         // look down .26 rad plus half the road's pitch (positive pitch = descending, track.js)
     cameraRoll=lerp(.08,cameraRoll,-Math.atan(info.roll)*19);  // roll with a third of the road's bank, in degrees (19 of 57.3; .3 before the post-deadline fix, tuned while the roll was wrong on half the corners; 17 and 18 built a byte or two bigger, 19 the same as 17.2). Until the post-deadline fix it was cameraRot.z, which buildMatrix turns about WORLD Z after the yaw: right facing +Z, the wrong way facing -Z, a nod facing +-X; glPreRender now rolls the view matrix in camera space (local/roll-axis-probe.js)
 
