@@ -100,6 +100,9 @@ function gameInit()
     // from the SDK can never stop gameUpdate from starting the loop: one did, a black screen on the playtest (2026-09-15)
     if (wavedashMode)
         try { wdInit(); } catch(e) { console.error('Wavedash: init failed', e); }
+    // Newgrounds (newgrounds.js), caught the same way: nothing it does may stop the first frame
+    if (newgroundsMode)
+        try { ngInit(); } catch(e) { console.error('Newgrounds: init failed', e); }
     gameUpdate();
 }
 
@@ -166,7 +169,7 @@ function gameUpdateInternal()
             // menuRowAt is the one hit test (the hover previews it). A locked name just bumps
             let pick = 0, craft = 0;
             const c = mousePressed ? menuRowAt() : -1;
-            if (c >= 0) enhancedMode && c > circuitCount ? go = 1 : c == circuitCount ? craft = 1 : c >= circuitsUnlocked() ? sound_bump.play(.5,.7) : c == currentCircuit ? go = 1 : pick = c - currentCircuit; // (row circuitCount is the TEAM button; the enhanced menu's row circuitCount+1 is PLAY)
+            if (c >= 0) enhancedMode && c > circuitCount + 1 ? toggleFullscreen() : enhancedMode && c > circuitCount ? go = 1 : c == circuitCount ? craft = 1 : c >= circuitsUnlocked() ? sound_bump.play(.5,.7) : c == currentCircuit ? go = 1 : pick = c - currentCircuit; // (row circuitCount is the TEAM button; the enhanced menu's row circuitCount+1 is PLAY)
             if (go)
             {
                 titleScreenMode = 0;
@@ -392,6 +395,11 @@ function enhancedModeUpdate()
 
     if (!titleScreenMode && autoPause && !document.hasFocus())
         paused = focusPaused = 1; // pause when losing focus
+
+    // F toggles fullscreen from anywhere, the title, the menu and a race alike (Frank, 2026-09-15; the menu's FULL SCREEN row is the
+    // same toggle for a mouse or a thumb). In dev mode F is the free camera, so the dev page keeps that until dev() is off
+    if (keyWasPressed('KeyF') && !(debug && devMode))
+        toggleFullscreen();
 
     if (keyWasPressed('KeyR') && !titleScreenMode) // restart
     {

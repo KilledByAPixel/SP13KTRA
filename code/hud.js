@@ -83,6 +83,8 @@ function drawHUD()
     if (enhancedMode) // the title logo's fade restarts each time the main title appears (titleLogoWhite)
         titleLogoStart = titleScreenMode && !menuMode ? titleLogoStart || performance.now() : 0;
     titleLogoStart = 0; // disable title fade for now
+    if (enhancedMode) // the subtitle's fade restarts each time the main title appears (titleSubtitleStart)
+        titleSubtitleStart = titleScreenMode && !menuMode ? titleSubtitleStart || performance.now() : 0;
     drawMap();
     const band = bandColor(); // the circuit's accent colour
 
@@ -115,7 +117,9 @@ function drawHUD()
         // the hit box was the .1 row's and the top and bottom of the word did not click
         row(circuitCount, enhancedMode ? 'CHANGE TEAM' : 'TEAM', playerVehicle.color, h == circuitCount ? WHITE : 0); // enhanced: the list's last row (2026-09-15); the 13k build keeps TEAM at the bottom
         if (enhancedMode) // PLAY races the selected circuit, like a click on its name, Space or Enter: big and white on the band, bottom left, centred under the map on a tall window (Frank, 2026-09-15)
-            getAspect() < 1 ? drawMenuCentred(circuitCount + 1, 'PLAY', WHITE, h > circuitCount ? WHITE : band) : row(circuitCount + 1, 'PLAY', WHITE, h > circuitCount ? WHITE : band);
+            getAspect() < 1 ? drawMenuCentred(circuitCount + 1, 'PLAY', WHITE, h == circuitCount + 1 ? WHITE : band) : row(circuitCount + 1, 'PLAY', WHITE, h == circuitCount + 1 ? WHITE : band);
+        if (enhancedMode) // FULL SCREEN, a list row under CHANGE TEAM, only while it can be offered (fullscreenOffer); hidden, its hit box goes too
+            fullscreenOffer() ? row(circuitCount + 2, 'FULL SCREEN', band, h == circuitCount + 2 ? WHITE : 0) : menuRowW[circuitCount + 2] = -9;
         debug && showRegions && drawRegions(); // the dev regions() command: the click regions over the rows
 
         const p = bestPlaces[currentCircuit]|0;
@@ -139,7 +143,14 @@ function drawHUD()
     }
     else if (titleScreenMode)
     {
-        drawLogo(.5, .2, enhancedMode ? min(.15, getAspect()*.11) : .15); // on a narrow enhanced window, clear of both edges (it is centred on 13K and TRA is wider than SP: aspect/5 under .6 ran past both edges, and .14 of the aspect touched the right one, Frank 2026-09-14)
+        drawLogo(.5, enhancedMode ? titleLogoY : .2, enhancedMode ? titleLogoSize() : .15); // enhanced: sized off a narrow window, or the cover shot's (titleCover)
+        if (enhancedMode)
+        {
+            // FULL SPECTRUM RACING under the logo (Frank, 2026-09-15), centred like the whole word above it (drawLogo centres the word
+            // on the enhanced title). It waits 1.5 s after the title appears, then fades in over a second
+            const s = titleLogoSize();
+            drawHUDText('FULL SPECTRUM RACING', .5, titleLogoY + s*.42, s*.3, rgb(1, 1, 1, clamp((performance.now()-titleSubtitleStart)/1e3-1.5, 0, 1)));
+        }
     }
     else
     {
@@ -243,8 +254,15 @@ const menuRowX = () => enhancedMode && getAspect() < 1 ? .05 : edge(.05); // the
 // centre .47 up; a taller window puts the spare height between the list and the map, Frank). menuRowX/Y/Size switch to it with
 // the test written out at each use, so the 13k build folds every one away
 const menuUnit = () => min(getAspect(), .55);
-const menuRowYTall = c => c > circuitCount ? 1-menuUnit()*.125 : menuUnit()*(.35 + c*.08 + (c > currentCircuit ? .05 : c == currentCircuit ? .025 : 0)); // PLAY (row circuitCount+1) locked to the bottom of the screen, CHANGE TEAM the list's last row spaced like the rest (2026-09-15: TEAM was at the bottom; the list started at .42 with a .03 gap before CHANGE TEAM, which reached the map from about aspect .53)
-const menuRowSizeTall = c => menuUnit()*(c > circuitCount ? .15 : c == currentCircuit ? .1 : .06); // PLAY big, CHANGE TEAM a list row
+const menuRowYTall = c => c > circuitCount + 1 ? menuRowYTall(circuitCount) + menuUnit()*.08 : c > circuitCount ? 1-menuUnit()*.125 : menuUnit()*(.35 + c*.08 + (c > currentCircuit ? .05 : c == currentCircuit ? .025 : 0)); // PLAY (row circuitCount+1) locked to the bottom of the screen, CHANGE TEAM the list's last row spaced like the rest (2026-09-15: TEAM was at the bottom; the list started at .42 with a .03 gap before CHANGE TEAM, which reached the map from about aspect .53)
+const menuRowSizeTall = c => menuUnit()*(c == circuitCount + 1 ? .15 : c == currentCircuit ? .1 : .06); // PLAY big, CHANGE TEAM and FULL SCREEN list rows
+
+// FULL SCREEN (enhanced only; Frank, 2026-09-15: Newgrounds has no fullscreen button): menu row circuitCount+2, drawn one list row under
+// CHANGE TEAM (row circuitCount; PLAY keeps circuitCount+1), in the band, its shadow white under the pointer. Offered only while windowed,
+// where the page may go fullscreen (not an iPhone, not a frame that disallows it) and not on Wavedash, whose own interface has a button;
+// Escape or the phone's back gesture leaves, and the row comes back. game.js calls draw.js's toggleFullscreen on its click, a frame after
+// the press, still inside the browser's user activation; the F key (enhancedModeUpdate) toggles fullscreen from anywhere
+const fullscreenOffer = () => document.fullscreenEnabled && !isFullscreen() && !window.Wavedash;
 
 // the portrait menu's PLAY button, centred under the map (TEAM was, Frank 2026-09-14, until it joined the list on 2026-09-15): centred
 // on the middle of the canvas, its measured right edge in mouseX units is just its width, and menuRowAt mirrors that for the left
@@ -260,15 +278,15 @@ function drawMenuCentred(c, text, color, shadow)
 // size and menuRowW its measured right edge (in mouseX units, written as the menu draws),
 // so a click has to land on the name itself, not a fixed box (the dev regions() command
 // draws the boxes). Row circuitCount, the TEAM button, sits under the list
-const menuRowY = c => enhancedMode && getAspect() < 1 ? menuRowYTall(c) : enhancedMode && c > circuitCount ? .9 : .27 + c*.052 + (c > currentCircuit ? .045 : c == currentCircuit ? .022 : 0) + (c == circuitCount ? enhancedMode ? 0 : .17 : 0); // enhanced: CHANGE TEAM ends the list after a gap and PLAY (row circuitCount+1) sits bottom left; the 13k build keeps TEAM at the bottom
+const menuRowY = c => enhancedMode && getAspect() < 1 ? menuRowYTall(c) : enhancedMode && c > circuitCount + 1 ? menuRowY(circuitCount) + .052 : enhancedMode && c > circuitCount ? .9 : .21 + c*.052 + (c > currentCircuit ? .045 : c == currentCircuit ? .022 : 0) + (c == circuitCount ? enhancedMode ? 0 : .17 : 0); // enhanced: CHANGE TEAM ends the list after a gap and PLAY (row circuitCount+1) sits bottom left; the 13k build keeps TEAM at the bottom
 const menuRowSize = c => enhancedMode && getAspect() < 1 ? menuRowSizeTall(c) : c == (enhancedMode ? circuitCount + 1 : circuitCount) ? .15 : c == currentCircuit ? .1 : .05, menuRowW = []; // the bottom button at .15: TEAM in the 13k build, PLAY in the enhanced one (where CHANGE TEAM is a .05 list row)
 
 // the row under the pointer, locked ones and the TEAM button (row circuitCount) included,
 // or -1: on the name itself, .45 of its size each way
 const menuRowAt = () =>
 {
-    for (let c = 0; c <= (enhancedMode ? circuitCount + 1 : circuitCount); ++c) // (the enhanced menu's row circuitCount+1 is PLAY)
-        if (abs(mouseY - menuRowY(c)) < menuRowSize(c)*.45 && mouseX > (enhancedMode && getAspect() < 1 && c > circuitCount ? -menuRowW[c] : menuRowX()*2-1) && mouseX < menuRowW[c]) // the portrait menu's TEAM is centred: its left edge mirrors its right
+    for (let c = 0; c <= (enhancedMode ? circuitCount + 2 : circuitCount); ++c) // (the enhanced menu's row circuitCount+1 is PLAY, circuitCount+2 FULL SCREEN)
+        if (abs(mouseY - menuRowY(c)) < menuRowSize(c)*.45 && mouseX > (enhancedMode && getAspect() < 1 && c == circuitCount + 1 ? -menuRowW[c] : menuRowX()*2-1) && mouseX < menuRowW[c]) // the portrait menu's TEAM is centred: its left edge mirrors its right
             return c;
     return -1;
 };
@@ -281,6 +299,11 @@ const menuRowAt = () =>
 function drawLogo(x, y, s)
 {
     const ctx = mainContext, W = mainCanvasSize.x, px = s*mainCanvasSize.y;
+    // the enhanced build's main title and portrait menu (its logo top centre) centre the WHOLE word on x, not 13K (Frank, 2026-09-15: off
+    // centre it looked wrong): SP ends at 13K's left edge and TRA starts at its right, so 13K moves left by half of TRA's width less SP's,
+    // measured at the logo's size (the empty text only sets the font). The 13k build and the wide menu's corner logo stay centred on 13K
+    if (enhancedMode && (!menuMode || getAspect() < 1))
+        drawHUDText('', 0, 0, s), x -= (ctx.measureText('TRA').width - ctx.measureText('SP').width)/2/W;
     const g = ctx.createLinearGradient(x*W-px, 0, x*W+px, 0);
     for(let i=9; i--;)
         g.addColorStop(i/8, hsl(i/8-time*.3, 1, .6));
@@ -294,6 +317,14 @@ function drawLogo(x, y, s)
 // second, then fade in over a second, every time the title appears (page load, or Escape from the menu: races and results return to the menu); the menu's
 // corner logo is full white (Frank, 2026-09-14)
 let titleLogoStart = 0; // performance.now() when the main title appeared, 0 while it is not showing (drawHUD)
+let titleSubtitleStart = 0; // the same for the title's FULL SPECTRUM RACING subtitle, which has its own fade (enhanced only)
+
+// THE COVER SHOT (Frank, 2026-09-15): 1 makes the main title's logo and subtitle nearly fill the width for a cover screenshot, the
+// whole word centred: at .15 of the aspect it spans about 92% of the width. The logo moves down to .3 so the bigger letters clear the
+// top. Enhanced only: the 13k build draws the plain title
+const titleCover = 0;
+const titleLogoSize = () => titleCover ? getAspect()*.13 : min(.15, getAspect()*.11); // on a narrow window, clear of both edges (sized when the logo was centred on 13K, whose TRA side is wider than SP's: aspect/5 under .6 ran past both edges, and .14 of the aspect touched the right one, Frank 2026-09-14)
+const titleLogoY = titleCover ? .3 : .2;
 const titleLogoWhite = () => titleLogoStart ? rgb(1, 1, 1, clamp((performance.now()-titleLogoStart)/1e3-1, 0, 1)) : WHITE;
 
 // every placing in the game (the race corner, the results card, the menu's BEST) through

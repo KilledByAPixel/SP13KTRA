@@ -377,6 +377,8 @@ function stepVehicle(v,c,dt)
             sound_lose.play(.7);
             lastRacePlace=fieldSize;
             gameOverTime=time;
+            wavedashMode && wdExplode(); // the secret Supernova achievement on Wavedash (wavedash.js)
+            newgroundsMode && ngExplode(); // and the Newgrounds medal (newgrounds.js)
         }
         return;
     }
@@ -604,6 +606,7 @@ function updateCars()
             bestTimes[currentCircuit]=min(bestTimes[currentCircuit]||1e9,raceTime); // 0 or empty is none
             writeSaveData();
             wavedashMode && wdFinish(); // the circuit's Wavedash board, the achievements and the cloud bests (wavedash.js), after the save holds them
+            newgroundsMode && ngFinish(); // the circuit's Newgrounds scoreboard and the medals (newgrounds.js)
         }
     }
 }

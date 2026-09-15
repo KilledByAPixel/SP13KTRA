@@ -24,6 +24,7 @@
 const debug = 1;
 let enhancedMode = 1; // the enhanced build: gamepad, WASD, aspect clamp (const 0 in releaseJS13K.js)
 let wavedashMode = 1; // the Wavedash hooks (wavedash.js), which do nothing without window.Wavedash (const 0 in releaseJS13K.js)
+let newgroundsMode = 1; // the Newgrounds hooks (newgrounds.js), which do nothing outside a logged-in Newgrounds session (const 0 in releaseJS13K.js)
 let enableAsserts = 1;
 let devMode = 0; // the dev() console command toggles it (the Home key until 2026-09-13); every dev key needs it, so a visitor to the public page plays the plain game. Saved in localStorage.SP13KDEV (devSet), so a reload stays in dev mode
 let topDownMode = 0, topDownZoom = 1, topDownPan; // T: an orthographic map view straight down over the loop (glPreRender, updateCamera); the wheel zooms, WASD pans
@@ -98,9 +99,10 @@ function drawRegions()
 {
     const ctx = mainContext, W = mainCanvasSize.x, H = mainCanvasSize.y;
     ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1;
-    for (let c = 0; c <= circuitCount + 1; ++c) // row circuitCount is CHANGE TEAM, circuitCount+1 PLAY (the dev page is enhanced)
+    for (let c = 0; c <= circuitCount + 2; ++c) // row circuitCount is CHANGE TEAM, circuitCount+1 PLAY, circuitCount+2 FULL SCREEN (the dev page is enhanced)
     {
-        const x0 = getAspect() < 1 && c > circuitCount ? (1-menuRowW[c])/2 : menuRowX(); // the portrait menu's TEAM is centred (menuRowAt)
+        if (menuRowW[c] < -2) continue; // FULL SCREEN while hidden
+        const x0 = getAspect() < 1 && c == circuitCount + 1 ? (1-menuRowW[c])/2 : menuRowX(); // the portrait menu's PLAY is centred (menuRowAt)
         ctx.strokeRect(x0*W, (menuRowY(c)-menuRowSize(c)*.45)*H, ((menuRowW[c]+1)/2-x0)*W, menuRowSize(c)*.9*H);
     }
 }

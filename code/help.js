@@ -110,6 +110,30 @@ function drawHelpTips()
     if (helpTip)
     {
         const t = time - helpTipTime; // in over .3 s, out over the last .5 s
-        drawHelpText(helpTip, .5, .22, .045, rgb(1, 1, 1, clamp(min(t/.3, (4-t)/.5))));
+        drawHelpLines(helpTip, .22, .045, rgb(1, 1, 1, clamp(min(t/.3, (4-t)/.5))));
     }
+}
+
+// a tip, centred; on a tall window one too wide for 92% of the width splits into two lines at the break nearest its middle, a ·
+// (dropped) if it has one, else a space (Frank, 2026-09-15: on a portrait phone a long tip shrank to fit and was hard to read; wide
+// windows keep one line). Each line still shrinks to fit if it must (drawHelpText)
+function drawHelpLines(text, y, size, color)
+{
+    const k = min(1, getAspect()); // drawHUDText's race scaling: the tips only show in a race
+    mainContext.font = `${size*k*mainCanvasSize.y}px "Archivo Black",arial,sans-serif`;
+    if (getAspect() < 1 && mainContext.measureText(text).width/mainCanvasSize.x > .92)
+    {
+        const sep = text.includes(' · ') ? ' · ' : ' ', middle = (text.length - sep.length)/2;
+        let at = -1;
+        for (let i = text.indexOf(sep); i >= 0; i = text.indexOf(sep, i+1))
+            if (at < 0 || abs(i - middle) < abs(at - middle))
+                at = i;
+        if (at > 0)
+        {
+            drawHelpText(text.slice(0, at), .5, y, size, color);
+            drawHelpText(text.slice(at + sep.length), .5, y + size*k*1.25, size, color);
+            return;
+        }
+    }
+    drawHelpText(text, .5, y, size, color);
 }

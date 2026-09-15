@@ -52,7 +52,38 @@ function wdFinish()
     wdSync();
 }
 
-// every achievement from the saved bests, so none can disagree with the menu (setAchievement is safe to repeat). The SDK
+// every achievement the saved bests have earned, as its index in the one order every platform shares: 0 a finish (any circuit, any
+// place), 1..8 first place on that track, 9 every track unlocked (finishing UMBRA, the seventh, unlocks the eighth), 10 first place on
+// all, 11 the secret Supernova (the player exploded in a race this session). Wavedash (wdAchieve) and Newgrounds (newgrounds.js,
+// ngAchieve) both unlock from it, so no platform can disagree with the menu
+function achievementsEarned()
+{
+    const earned = [];
+    /[1-8]/.test(bestPlaces) && earned.push(0);
+    for (let c = 0; c < circuitCount; ++c)
+        bestPlaces[c] == 1 && earned.push(c+1);
+    circuitsUnlocked() == circuitCount && earned.push(9);
+    /^1+$/.test(bestPlaces) && earned.push(10);
+    achievementExploded && earned.push(11);
+    return earned;
+}
+
+// the secret Supernova (Frank, 2026-09-15, a joke achievement): set when the player explodes in a race (wdExplode, ngExplode). Not
+// saved: both platforms keep an unlock themselves, and a refused one is retried like the rest while the page stays open
+let achievementExploded = 0;
+
+// achievement i's Wavedash identifier (tools/wavedash-setup.js): ACH_01_FINISH, ACH_02_WIN_TRACK_1 .. ACH_09_WIN_TRACK_8, ACH_10_UNLOCK_ALL,
+// ACH_11_WIN_ALL, ACH_12_EXPLODE
+const wdAchievementId = i => !i ? 'ACH_01_FINISH' : i < 9 ? 'ACH_0' + (i+1) + '_WIN_TRACK_' + i : i < 10 ? 'ACH_10_UNLOCK_ALL' : i < 11 ? 'ACH_11_WIN_ALL' : 'ACH_12_EXPLODE';
+
+// the player exploded in a race, as the race ends (vehicle.js): the secret Supernova
+function wdExplode()
+{
+    achievementExploded = 1;
+    wdAchieve();
+}
+
+// every achievement from the saved bests (setAchievement is safe to repeat). The SDK
 // answers false and DROPS the unlock until it has loaded the player's stats and achievements and the game's achievement ids
 // (StatsManager.isReady, @wvdsh/sdk-js 1.3.48), which takes a moment after load: every unlock from the save at init was lost
 // that way (2026-09-15). So a refused unlock is tried again every 2 s, and warned about only after a minute of refusals
@@ -60,12 +91,7 @@ let wdAchieveTries = 0, wdAchieveTimer = 0;
 function wdAchieve()
 {
     if (!wd()) return;
-    const ids = [];
-    /[1-8]/.test(bestPlaces) && ids.push('ACH_01_FINISH'); // any circuit finished, any place
-    for (let c = 0; c < circuitCount; ++c)
-        bestPlaces[c] == 1 && ids.push('ACH_0' + (c+2) + '_WIN_TRACK_' + (c+1)); // first place there (circuitCount 8: ACH_02..ACH_09)
-    circuitsUnlocked() == circuitCount && ids.push('ACH_10_UNLOCK_ALL'); // finishing UMBRA, the seventh, unlocks the eighth
-    /^1+$/.test(bestPlaces) && ids.push('ACH_11_WIN_ALL');
+    const ids = achievementsEarned().map(wdAchievementId);
     // a throw counts as a refusal: the SDK's synchronous calls can throw (apiCallSync rethrows and never catches the manager's
     // own call), and one uncaught here stopped the game's first frame for good, a black screen (2026-09-15)
     const refused = ids.filter(id => { try { return !wd().setAchievement(id, true); } catch(e) { return 1; } });
