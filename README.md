@@ -41,5 +41,3 @@ Finish a race to unlock the next circuit. Explode and you race it again.
 - Boost pads, recharge strips, rough shoulders and rivals that race back.
 - A live minimap of the real circuit with every racer on it.
 - Your best placing and best time saved for every circuit.
-
-![SP13KTRA](whiteUnicorn.jpg)
