@@ -23,7 +23,7 @@ const raceLine=3000, maxCraftSpeed=32000; // route s of the start line; the norm
 
 // the player's race effects, and only in a race: the attract lap behind the title and
 // menu is silent apart from the menu's own cues
-const racing=v=>v===playerVehicle && !titleScreenMode;
+const racing=v=>v===playerVehicle && !titleScreenMode && !gameOverTime; // and not once the race is over: the AI drives on in silence, as behind the title and menu (Frank, 2026-09-15: a pad's boost played over the results card);
 
 // timers (seconds): the next low-energy beep, lap beeps left and the next one, the next
 // charge blip; contactTimes: per-pair contact cooldown, keyed i*count+j
@@ -365,7 +365,7 @@ function stepVehicle(v,c,dt)
             for(let i=60;i--;) updateCamera();
         }
     }
-    if(v.energy<=0 && !(racing(v) && gameOverTime)) // the player cannot die after the finish (2026-09-13)
+    if(v.energy<=0 && !(v===playerVehicle && gameOverTime)) // the player cannot die after the finish (2026-09-13)
     {
         // death: the explosion (drawTrails), two seconds stopped, then the respawn above.
         // The player's death ends the race: the results card, dead last on the next grid
@@ -381,7 +381,6 @@ function stepVehicle(v,c,dt)
         return;
     }
     if(startCountdown) { v.speed=0; return; }
-    if(gameOverTime) c={steer:0,brake:1}; // everyone coasts to a stop after the finish
 
     const speed=v.velocity.mag();
     // (a POWER SLIDE, brake+steer at speed with a low grip, a carve and a charged release burst,
@@ -524,7 +523,7 @@ function updateCars()
     for(const v of vehicles)
     {
         let c;
-        if(v!==playerVehicle || titleScreenMode || testDrive) c=driveAI(v);
+        if(v!==playerVehicle || titleScreenMode || testDrive || gameOverTime) c=driveAI(v); // the race over (a finish or a death), the AI drives the player's craft on and the field keeps racing (Frank, 2026-09-15: everyone braked to a stop until then)
         else
         {
             // keys ramp the steer over about a fifth of a second both ways (a digital lock
@@ -604,6 +603,7 @@ function updateCars()
             // and the best time, kept apart: a better time can come with a worse place (Frank, 2026-09-13)
             bestTimes[currentCircuit]=min(bestTimes[currentCircuit]||1e9,raceTime); // 0 or empty is none
             writeSaveData();
+            wavedashMode && wdFinish(); // the circuit's Wavedash board, the achievements and the cloud bests (wavedash.js), after the save holds them
         }
     }
 }

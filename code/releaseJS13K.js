@@ -2,6 +2,7 @@
 
 const debug = 0;
 const enhancedMode = 0;
+const wavedashMode = 0; // no Wavedash hooks: wavedash.js is not in the 13k build and the two call sites fold away
 let debugInfo, debugMesh, devMode;
 // build flags live HERE, first in the concat order: terser folds a const only into
 // reads that FOLLOW its declaration, so a flag declared in game.js stays live in

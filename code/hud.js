@@ -80,6 +80,9 @@ function drawHUD()
     if (freeCamMode || topDownMode)
         return; // the dev free camera and map view show the world clean
 
+    if (enhancedMode) // the title logo's fade restarts each time the main title appears (titleLogoWhite)
+        titleLogoStart = titleScreenMode && !menuMode ? titleLogoStart || performance.now() : 0;
+    titleLogoStart = 0; // disable title fade for now
     drawMap();
     const band = bandColor(); // the circuit's accent colour
 
@@ -279,9 +282,15 @@ function drawLogo(x, y, s)
         g.addColorStop(i/8, hsl(i/8-time*.3, 1, .6));
     drawHUDText('13K', x,y + Math.sin(time)*s*.05, s/.9, g);
     const w = ctx.measureText('13K').width/2/W; // the font is still set from that call
-    drawHUDText('SP', x-w,y, s, WHITE, 'right');
-    drawHUDText('TRA', x+w,y, s, WHITE, 'left');
+    drawHUDText('SP', x-w,y, s, enhancedMode ? titleLogoWhite() : WHITE, 'right');
+    drawHUDText('TRA', x+w,y, s, enhancedMode ? titleLogoWhite() : WHITE, 'left');
 }
+
+// enhanced only (the 13k build folds both uses to WHITE): on the main title SP and TRA wait while 13K shows alone for a
+// second, then fade in over a second, every time the title appears (page load, or Escape from the menu: races and results return to the menu); the menu's
+// corner logo is full white (Frank, 2026-09-14)
+let titleLogoStart = 0; // performance.now() when the main title appeared, 0 while it is not showing (drawHUD)
+const titleLogoWhite = () => titleLogoStart ? rgb(1, 1, 1, clamp((performance.now()-titleLogoStart)/1e3-1, 0, 1)) : WHITE;
 
 // every placing in the game (the race corner, the results card, the menu's BEST) through
 // one call, so they read the same: the numeral white and right-aligned at x, its ordinal

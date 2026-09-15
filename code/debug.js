@@ -23,6 +23,7 @@
 
 const debug = 1;
 let enhancedMode = 1; // the enhanced build: gamepad, WASD, aspect clamp (const 0 in releaseJS13K.js)
+let wavedashMode = 1; // the Wavedash hooks (wavedash.js), which do nothing without window.Wavedash (const 0 in releaseJS13K.js)
 let enableAsserts = 1;
 let devMode = 0; // the dev() console command toggles it (the Home key until 2026-09-13); every dev key needs it, so a visitor to the public page plays the plain game. Saved in localStorage.SP13KDEV (devSet), so a reload stays in dev mode
 let topDownMode = 0, topDownZoom = 1, topDownPan; // T: an orthographic map view straight down over the loop (glPreRender, updateCamera); the wheel zooms, WASD pans
@@ -159,6 +160,34 @@ function debugVectorMethods()
     }
 }
 
+// the dev page's Wavedash SDK mock: index.html#wd installs it, #wd2 also seeds a cloud save (the first seven circuits won),
+// so the hooks in wavedash.js can be watched without the platform. Every call logs as WAVEDASH name args and is recorded
+// in window.wdCalls (test/wavedash-walk.js --dev reads it); the files live in memory, as the SDK's shapes in 1.3.48
+function debugWavedashMock(seed)
+{
+    const local = {}, remote = {}, ok = data => Promise.resolve({success: true, data});
+    seed && (remote['bests.json'] = new TextEncoder().encode(JSON.stringify({places: '11111110', times: [50, 60, 70, 80, 90, 100, 110, 0]})));
+    const api = {
+        init: () => true,
+        setAchievement: () => true,
+        getOrCreateLeaderboard: name => ok({id: 'board-' + name}),
+        uploadLeaderboardScore: () => ok({}),
+        downloadRemoteFile: p => remote[p] ? (local[p] = remote[p], ok(p)) : Promise.resolve({success: false, data: null, message: 'no file'}),
+        remoteFileExists: p => ok(!!remote[p]),
+        readLocalFile: p => Promise.resolve(local[p] || null),
+        writeLocalFile: (p, data) => (local[p] = data, Promise.resolve(true)),
+        uploadRemoteFile: p => (remote[p] = local[p], ok(p)),
+    };
+    window.wdCalls = [];
+    window.Wavedash = Object.fromEntries(Object.entries(api).map(([k, f]) => [k, (...a) =>
+    {
+        const args = a.map(v => v instanceof Uint8Array ? 'bytes' : v);
+        console.log('WAVEDASH', k, ...args);
+        wdCalls.push([k, ...args]);
+        return f(...a);
+    }]));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // init: mouse look, the free cam bookmark and the key legend
 
@@ -170,6 +199,7 @@ function debugInit()
     mouseDelta = vec3();
     localStorage.SP13KDEV && devSet(1); // a reload stays in dev mode
     localStorage.SP13KMENU && (menuMode = 1); // the menu() command: open on the menu
+    location.hash.startsWith('#wd') && debugWavedashMock(location.hash == '#wd2'); // before gameInit's wdInit (debugInit runs first)
 
     // free cam mouse look, chained onto input.js's mouse steer handler (debugInit runs after
     // inputInit; assigning onmousemove here used to be overwritten by it, which killed the look)

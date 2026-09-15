@@ -2,6 +2,7 @@
 
 const debug = 0;
 const enhancedMode = 1;
+const wavedashMode = 1; // the Wavedash hooks (wavedash.js): they do nothing unless the platform injected window.Wavedash
 let debugInfo, debugMesh, devMode;
 // build flags (see releaseJS13K.js: declared first so terser can fold them everywhere)
 const clampAspectRatios = 1;

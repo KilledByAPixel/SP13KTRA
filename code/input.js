@@ -86,7 +86,7 @@ function inputInit()
     }
 
     onmousemove = (e)=> (mouseX = e.clientX/innerWidth*2-1, mouseY = e.clientY/innerHeight); // vehicle.js scales x by 3 and clamps: full lock a third of the way out
-    onmousedown = (e)=> { e.button && e.preventDefault(); mouseButtons |= 1<<e.button; mouseMode = 1; e.button || (mousePressed = 1); }; // preventDefault: a middle click no longer starts the browser's autoscroll (the middle button brakes) // any click: the pointer steers from now on, button or not
+    onmousedown = (e)=> { enhancedMode && e.isTrusted && (isUsingGamepad = 0); e.button && e.preventDefault(); mouseButtons |= 1<<e.button; mouseMode = 1; e.button || (mousePressed = 1); }; // a real click takes control back from the gamepad, as a key does (Frank, 2026-09-15: only a key did, so after the pad the mouse could not steer); isTrusted: touch.js forwards a touch off its pad through here, and that must leave the pad in control // preventDefault: a middle click no longer starts the browser's autoscroll (the middle button brakes) // any click: the pointer steers from now on, button or not
     onmouseup = (e)=> mouseButtons &= ~(1<<e.button);
     oncontextmenu = (e)=> e.preventDefault(); // the right button is the boost
     // losing focus stops the engine loop at once: a hidden tab gets no animation frames, so the

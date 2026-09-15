@@ -74,7 +74,7 @@ function gameInit()
     if (enhancedMode)
     {
         console.log(`SP13KTRA by Frank Force`);
-        console.log(`www.frankforce.com 🚗🌴`);
+        console.log(`www.frankforce.com 🦄🌈`);
     }
 
     if (quickStart || testLevel)
@@ -95,6 +95,11 @@ function gameInit()
     debug && debugInit(); // after inputInit: it chains the free cam's look onto the mouse steer handler
     initLevelInfos();
     gameStart();
+    // the Wavedash platform (wavedash.js): once the game can draw, and before the first frame, so a throw in that frame cannot leave
+    // the game behind the platform's loading screen (init dismisses it; the frame still paints in this same task). Caught, so a throw
+    // from the SDK can never stop gameUpdate from starting the loop: one did, a black screen on the playtest (2026-09-15)
+    if (wavedashMode)
+        try { wdInit(); } catch(e) { console.error('Wavedash: init failed', e); }
     gameUpdate();
 }
 
@@ -418,7 +423,7 @@ function updateCamera()
     // target onto the route (hinted a boom length behind the player), clamp it 500 units
     // inside the walls and never let it sink under the road plus 650
     const r=projectRoute(target,v.s-cameraBoomZ/routeScale), info=r.info;
-    const x=clamp(r.x,-info.w+500,info.w-500), surface=info.point(x,650);
+    const x=r.x, surface=info.point(x,650);
     target.addSelf(info.right.scale(x-r.x));
     target.y=max(target.y,surface.y);
 
