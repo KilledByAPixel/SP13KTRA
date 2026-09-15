@@ -125,7 +125,7 @@ function touchLayout(W, H)
     ] : [
         {stick:1, x:S*1.4, y:H-S*1.4, r:S*.8}, // the steer line's rest; r is half its length
         {button:0, x:W-S*1.1, y:H-S*1.1, r:S*.7, label:'GAS'},
-        {button:1, x:W-S*(tall ? 2.35 : 2.7), y:H-S*(tall ? 2.35 : .8), r:S*.5, label:'BRAKE'},
+        {button:2, x:W-S*(tall ? 2.35 : 2.7), y:H-S*(tall ? 2.35 : .8), r:S*.5, label:'BRAKE'}, // button 2 (X), a brake button: 1 (B) turbos since 2026-09-15
         {button:5, x:W-S*1.1, y:H-S*(tall ? 2.7 : 2.5), r:S*.5, label:'TURBO'}, // lower on a wide window: at 2.7 it overlapped the minimap under the lap
         {button:9, x:W/2, y:S*.45, r:S*.3, label:'II', fade:1}, // fade: hidden while playing (touchUpdate), touchable always
     ];

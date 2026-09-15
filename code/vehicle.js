@@ -341,7 +341,7 @@ function containCraft(v)
 function stepVehicle(v,c,dt)
 {
     v.previousPosition=v.pos.scale(1);
-    v.throttle=lerp(.15,v.throttle,c.brake?-.5:c.gas?1:0); // the engine light follows the gas: off it, it shrinks as at rest; on the brake it eases to -.5, so the ribbon narrows to a quarter and the nozzles to .15 of their size, the brake's feedback (to -1 and out until 2026-09-13, Frank: small, not gone)
+    v.throttle=lerp(.15,v.throttle,c.brake?-.5:c.gas?enhancedMode?+c.gas:1:0); // enhanced: the gamepad trigger's partial gas lights the engine partway // the engine light follows the gas: off it, it shrinks as at rest; on the brake it eases to -.5, so the ribbon narrows to a quarter and the nozzles to .15 of their size, the brake's feedback (to -1 and out until 2026-09-13, Frank: small, not gone)
     v.burn=lerp(.15,v.burn,v.boostTime>time?1:0); // the boost: the ribbon and nozzles swell and shrink over a few frames, never snap
 
     // a non-finite state is treated as a death: the respawn below rebuilds it from the route
@@ -437,7 +437,7 @@ function stepVehicle(v,c,dt)
     const boosted=v.boostTime>time, cap=boosted?(v.boostPower?40000:39000):c.cap||maxCraftSpeed;
     // the brake cuts the gas AND any boost (a boost's thrust ignored the brake until the post-deadline fix, so braking
     // after a pad or on the turbo still gained speed: 13,500 or 20,000 of thrust against the brake's 10,500)
-    let accel=c.brake?0:boosted?(v.boostPower?20000:20000):c.gas?9600:0; // units/s^2
+    let accel=c.brake?0:boosted?(v.boostPower?20000:20000):c.gas?9600*(enhancedMode?c.gas:1):0; // units/s^2 (enhanced: gas is 0..1 from the gamepad's right trigger; keys and mouse give 0 or 1)
     if(speed>=cap) accel=0;
     v.velocity.addSelf(v.forward.scale(accel*dt));
     // deceleration (units/s^2): the brake 10,500, coasting 1,000 (2,700 before: a release
@@ -553,9 +553,9 @@ function updateCars()
             if(enhancedMode && isUsingGamepad)
             {
                 c.steer=gamepadStick(0).x;
-                c.gas=gamepadIsDown(0)||gamepadIsDown(7); // A or the right trigger
-                c.brake=gamepadIsDown(1)||gamepadIsDown(2)||gamepadIsDown(6); // B, X or the left trigger
-                c.boost=gamepadIsDown(5);
+                c.gas=max(gamepadIsDown(0), gamepadDataValues[0]?.[7]||0); // A full, or the right trigger ANALOG, 0..1 past its dead zone (Frank, 2026-09-15: it was on or off)
+                c.brake=gamepadIsDown(2)||gamepadIsDown(6); // X or the left trigger, on or off (B brakes no more: it is a turbo button)
+                c.boost=gamepadIsDown(1)||gamepadIsDown(5); // B or RB (Frank, 2026-09-15: B added)
             }
         }
         stepVehicle(v,c,timeDelta);

@@ -36,19 +36,36 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const musicKick  = new Sound([.5,,100,.005,.05,,,,-1]); // a thump sliding down, every loop's (tuned per loop by the drum draw K)
+const musicPad   = new Sound([.05,0,110,.5,3,2]); // the pad, a triangle at A3: half a second in, three held, two out; every loop's, rendered once here (inside the bake it was one unbreakable 46 ms slice, 2026-09-15)
 const musicSeeds = [0,638,826,5078,9284,7811,7143,2259]; // one integer per circuit: the seed its loop is baked from (0 is the original loop, by construction: musicBake). The top suggestion of tools/music-candidates-gen.js for each circuit's mood (2026-09-13) until Frank picks by ear in tools/music.html
 let musicLoop, musicSeed, musicInfo; // the selected circuit's loop and the seed it holds; the draws, for the tool (debug only)
-let musicSource, musicEpoch; // musicEpoch: the audio time the loop started; a later start joins it in progress
+let musicSource, musicEpoch, musicBaking = 0; // musicEpoch: the audio time the loop started; a later start joins it in progress. musicBaking: the enhanced build's bake in progress (a musicBakeSteps generator), 0 when none
 
 // gameStart: a new circuit's loop, from the top; the same circuit carries on
 function musicLoad()
 {
     if (musicSeed != musicSeeds[currentCircuit])
-        musicLoop = musicBake(musicSeed = musicSeeds[currentCircuit]), musicStop(), musicEpoch = 0;
+        enhancedMode ? (musicBaking = musicBakeSteps(musicSeed = musicSeeds[currentCircuit]), musicFade(), musicLoop = 0) // enhanced: baked a slice per frame by musicUpdate (no freeze at a circuit change); the old loop fades out now (musicFade), a short silence until the new one is ready (Frank, 2026-09-15: it played on for a day); a newer circuit replaces an unfinished bake
+            : (musicLoop = musicBake(musicSeed = musicSeeds[currentCircuit]), musicStop(), musicEpoch = 0);
 }
 
-// bake one loop from a seed: the full mix, 128 beats
+// <bake-at-once> (build.js removes this block from the 13k build, where musicBakeSteps becomes a plain musicBake again)
+// bake one loop from a seed at once: musicBakeSteps run to its end (tools/music.html and the seed scanner)
 function musicBake(seed)
+{
+    for (const steps = musicBakeSteps(seed);;)
+    {
+        const s = steps.next();
+        if (s.done) return s.value;
+    }
+}
+// </bake-at-once>
+
+// bake one loop from a seed: the full mix, 128 beats. A generator that yields between slices of the work, so the enhanced build can
+// spread a bake over frames (musicUpdate, Frank 2026-09-15: a circuit change froze for the bake). The first slice makes every draw
+// (random is shared: nothing may draw between them) and renders the instruments; the draw block must stay one statement ending
+// before the musicInfo line, which tools/music-candidates-gen.js cuts out and runs on its own
+function* musicBakeSteps(seed)
 {
     random.setSeed(seed);
 
@@ -103,13 +120,18 @@ function musicBake(seed)
         G = [[0x1111,0x1010],[0x0401,0x1010],[0x0409,0x0100],[0x5111,0x9010],[0x0441,0x1010],[0x0821,0x9010],[0x0101,0],[0x0001,0x1000]][r(8)],
         K = (r(5)+2)%5-2, D = r(2), B = 1^r(2), T = r(3), V = [[.05,2,1,.05],[.08,1,1,.15],[.035,0,.2,.02]][T],
         u = [16*r(3), 16*r(3), 16*((r(3)+1)%3), 16*r(3)], F = u.map(f => f-Math.min(...u)), // the entrances shifted so the earliest is beat 0: all four late left a silent intro, or a pad alone under the closed filter (FILAMENT's 6881, SODIUM's 826, 2026-09-13)
-        DG = [1,.5,.2][r(3)], LG = [1,1.8][r(2)], P = r(2), BM = r(2),
-        snare = new Sound([.3,,150,,,.02+D*.02,,,,,,,,3]),
-        hat   = new Sound([.03,,1e3,,,.01+D*.04,,,,,,,,9]),
-        bass  = new Sound([.08+B*.04,,55,,.12,.1,B*2,B||.3,,,,,,,,,,,.02]),
-        lead  = new Sound([V[0]*LG,,,.01,V[3],.08,V[1],V[2],,,,,,,,,,.6,.05]),
-        pad   = new Sound([.05,0,110,.5,3,2]); // a triangle at A3: half a second in, three held, two out
+        DG = [1,.5,.2][r(3)], LG = [1,1.8][r(2)], P = r(2), BM = r(2);
     debug && (musicInfo = {seed,bpm,key,scale,roots,hatBits,bassBits,leadBits,leadPhrases,S,J,O,E,G,K,D,B,T,F,DG,LG,P,BM});
+    yield; // the end of the first slice: every draw at once (random is shared)
+    // the drawn instruments, one render a slice (all of them in one slice took about 60 ms headless); outside the draw block the seed scanner cuts out
+    const snare = new Sound([.3,,150,,,.02+D*.02,,,,,,,,3]);
+    yield;
+    const hat   = new Sound([.03,,1e3,,,.01+D*.04,,,,,,,,9]);
+    yield;
+    const bass  = new Sound([.08+B*.04,,55,,.12,.1,B*2,B||.3,,,,,,,,,,,.02]);
+    yield;
+    const lead  = new Sound([V[0]*LG,,,.01,V[3],.08,V[1],V[2],,,,,,,,,,.6,.05]);
+    yield;
 
     const beat = zzfxR*60/bpm|0, L = beat*128, mix = new Float32Array(L), m = new Float32Array(L);
     let at;
@@ -135,12 +157,13 @@ function musicBake(seed)
     {
         const b = t>>2, r = roots[b>>4]+key, brk = b>>4==6, bit = 1<<(t&15), n = r+O+scale[(t>>S)*J%6];
         at = t*beat/4|0;
+        yield; // a slice every sixteenth (a slice a bar reached 39 ms headless: a bar can hold long pad notes)
         brk || b<F[0] || G[0]&bit && hit(mix, musicKick, K, DG);
         brk || b<F[1] || G[1]&bit && hit(mix, snare, K, DG);
         b>=F[2] && (brk ? b>105 && t&1 : hatBits&bit) && hit(mix, hat, K, DG);
         bassBits&bit && b>=F[3] && b<96 && hit(m, bass, r-12*((b&7)==7)+BM*scale[b%4]);
         leadBits&bit && leadPhrases>>(b>>5)&1 && b<123 && (hit(m, lead, n), hit(m, lead, n+.12));
-        P && !(t%64) && (hit(m, pad, r), hit(m, pad, r+7));
+        P && !(t%64) && (hit(m, musicPad, r), hit(m, musicPad, r+7));
     }
 
     // the post pass over the melodic stem: a resonant lowpass (Chamberlin state variable,
@@ -159,15 +182,38 @@ function musicBake(seed)
         m[i] = lo + (i<d ? 0 : m[i-d])*.35; // (a guarded read: m[i-d]||0 read before the array for the first d samples, about 15% slower warm, 2026-09-13)
         m[i] *= min(min(1, i%beat/2205), (beat-i%beat)/441); // the pump: out over the last 10 ms before a beat, in over 50 ms after (a cut to zero AT the beat clicked on any pattern still sounding there: the original's bass fell between the beats, 2026-09-13)
         mix[i] = Math.tanh(mix[i] + m[i]);
+        i&32767 || (yield); // a slice every 32,768 samples of the post pass
     }
     // the level: every loop scaled to the original's RMS (.14), a boost capped at 2.5, so a loop
     // with barely any drums or no lead is not 12 dB under the finale (2026-09-13; the original
     // is already there, a gain of .99)
-    let e = 0;
-    for (const x of mix) e += x*x;
+    let e = 0, n = 0;
+    for (const x of mix)
+    {
+        e += x*x;
+        ++n&131071 || (yield); // the level pass in slices too: in one piece it took 55-70 ms headless
+    }
     e = min(2.5, .14/Math.sqrt(e/L));
-    for (let i = L; i--;) mix[i] *= e;
+    for (let i = L; i--;)
+    {
+        mix[i] *= e;
+        i&131071 || (yield);
+    }
     return mix;
+}
+
+// the enhanced build's circuit change: the loop fades out over .25 s and stops, instead of a cut mid-wave that popped (Frank, 2026-09-15).
+// musicSource is let go at once, so the new loop can start the moment its bake is done; playSamples hangs the gain on the source (volumeNode)
+function musicFade()
+{
+    if (musicSource)
+    {
+        const gain = musicSource.volumeNode.gain, t = audioContext.currentTime;
+        gain.setValueAtTime(gain.value, t);
+        gain.linearRampToValueAtTime(0, t + .25); // linear: an exponential ramp never reaches 0
+        musicSource.stop(t + .25);
+    }
+    musicSource = 0;
 }
 
 // stop the loop (input.js onblur too)
@@ -183,7 +229,17 @@ function musicStop()
 // new circuit ever restarts it
 function musicUpdate()
 {
+    if (enhancedMode && musicBaking) // the enhanced build's bake, about 4 ms a frame, muted or not; done, the new loop starts from its top (nothing plays meanwhile: musicLoad cleared the old)
+        for (const end = performance.now() + 4; performance.now() < end;)
+        {
+            const s = musicBaking.next();
+            if (s.done)
+            {
+                musicLoop = s.value, musicBaking = 0, musicStop(), musicEpoch = 0;
+                break;
+            }
+        }
     if (!soundVolume || musicMuted) return musicStop(); // musicMuted: the M key, saved (game.js)
-    if (!musicSource && (musicSource = playSamples(musicLoop, 1, 1, musicEpoch ? (audioContext.currentTime-musicEpoch)%(musicLoop.length/zzfxR) : 0)))
+    if (!musicSource && (!enhancedMode || musicLoop) && (musicSource = playSamples(musicLoop, 1, 1, musicEpoch ? (audioContext.currentTime-musicEpoch)%(musicLoop.length/zzfxR) : 0)))
         musicSource.loop = 1, musicEpoch ||= audioContext.currentTime;
 }

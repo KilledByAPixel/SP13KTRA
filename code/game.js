@@ -154,11 +154,11 @@ function gameUpdateInternal()
         // the craft, Space or a click on the selected name races, and Escape returns to the title. Results
         // return to the menu. The attract race never restarts on its own: the field laps until a new
         // circuit or a race (a restart every 60 s went on 2026-09-13, Frank: they just keep racing)
-        let go = keyWasPressed('Space') || enhancedMode && isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9));
+        let go = keyWasPressed('Space') || enhancedMode && (keyWasPressed('Enter') || keyWasPressed('NumpadEnter') || isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9))); // enhanced: Enter as Space (Frank, 2026-09-15)
         if (!freeCamMode) // the free cam has the keys and the mouse (debug.js) and hides the HUD: the title and the menu ignore them (the else below is the menu's)
         if (!menuMode)
             (go || mousePressed) && (menuMode = 1, sound_checkpoint.play(.5));
-        else
+        else if (!(enhancedMode && helpMenu())) // the HELP card takes the menu's input while it is open, and on the frame it opens or closes (help.js)
         {
             // the mouse: a click on a circuit's name selects it, a click on the selected name
             // races, anywhere else does nothing. The click has to land on the name itself:
@@ -166,7 +166,7 @@ function gameUpdateInternal()
             // menuRowAt is the one hit test (the hover previews it). A locked name just bumps
             let pick = 0, craft = 0;
             const c = mousePressed ? menuRowAt() : -1;
-            if (c >= 0) c == circuitCount ? craft = 1 : c >= circuitsUnlocked() ? sound_bump.play(.5,.7) : c == currentCircuit ? go = 1 : pick = c - currentCircuit; // (row circuitCount is the TEAM button)
+            if (c >= 0) enhancedMode && c > circuitCount ? go = 1 : c == circuitCount ? craft = 1 : c >= circuitsUnlocked() ? sound_bump.play(.5,.7) : c == currentCircuit ? go = 1 : pick = c - currentCircuit; // (row circuitCount is the TEAM button; the enhanced menu's row circuitCount+1 is PLAY)
             if (go)
             {
                 titleScreenMode = 0;
@@ -229,7 +229,7 @@ function gameUpdateInternal()
         }
 
         // results: Space/click after a second, or 12 s on their own, leave the results card
-        if (gameOverTime && time-gameOverTime > 1 && (keyWasPressed('Space') || mousePressed || enhancedMode && isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9))) || gameOverTime && time-gameOverTime > 12)
+        if (gameOverTime && time-gameOverTime > 1 && (keyWasPressed('Space') || mousePressed || enhancedMode && (keyWasPressed('Enter') || keyWasPressed('NumpadEnter') || isUsingGamepad && (gamepadWasPressed(0)||gamepadWasPressed(9)))) || gameOverTime && time-gameOverTime > 12)
         {
             // any finish advances the grand prix (the finale's wraps to the opener); a death
             // retries: finishing is enough, there is no podium rule

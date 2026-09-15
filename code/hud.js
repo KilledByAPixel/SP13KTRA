@@ -87,7 +87,7 @@ function drawHUD()
     const band = bandColor(); // the circuit's accent colour
 
     if (enhancedMode && paused)
-        drawHUDText('PAUSE', .5,.9, .08);
+        drawHUDText('PAUSE', .5,.6, .08); // 60% down (.9 until 2026-09-15: on a small screen it sat on the bottom HUD, Frank); the touch pad's RESUME and TITLE sit lower, at .72
 
     if (titleScreenMode && menuMode)
     {
@@ -113,7 +113,9 @@ function drawHUD()
         // under the pointer; a click takes the next craft (game.js). It is row circuitCount of
         // the same hit test, and it draws at menuRowSize like every other row: at a hard .15
         // the hit box was the .1 row's and the top and bottom of the word did not click
-        enhancedMode && getAspect() < 1 ? drawTeamCentred(h == circuitCount ? WHITE : 0) : row(circuitCount, 'TEAM', playerVehicle.color, h == circuitCount ? WHITE : 0); // the portrait menu centres it under the map
+        row(circuitCount, enhancedMode ? 'CHANGE TEAM' : 'TEAM', playerVehicle.color, h == circuitCount ? WHITE : 0); // enhanced: the list's last row (2026-09-15); the 13k build keeps TEAM at the bottom
+        if (enhancedMode) // PLAY races the selected circuit, like a click on its name, Space or Enter: big and white on the band, bottom left, centred under the map on a tall window (Frank, 2026-09-15)
+            getAspect() < 1 ? drawMenuCentred(circuitCount + 1, 'PLAY', WHITE, h > circuitCount ? WHITE : band) : row(circuitCount + 1, 'PLAY', WHITE, h > circuitCount ? WHITE : band);
         debug && showRegions && drawRegions(); // the dev regions() command: the click regions over the rows
 
         const p = bestPlaces[currentCircuit]|0;
@@ -122,9 +124,9 @@ function drawHUD()
             if (enhancedMode && getAspect() < 1) // the portrait menu: BEST, the place and the time on one line over the list
             {
                 const m = menuUnit();
-                drawHUDText('BEST', .05, .3*m, .06*m, band, 'left');
-                drawPlace(p, .5, .3*m, .08*m);
-                bestTimes[currentCircuit] && drawHUDText(formatTimeString(bestTimes[currentCircuit]), .95, .3*m, .06*m, WHITE, 'right');
+                drawHUDText('BEST', .05, .25*m, .06*m, band, 'left');
+                drawPlace(p, .5, .25*m, .08*m);
+                bestTimes[currentCircuit] && drawHUDText(formatTimeString(bestTimes[currentCircuit]), .95, .25*m, .06*m, WHITE, 'right');
             }
             else
             {
@@ -133,6 +135,7 @@ function drawHUD()
             bestTimes[currentCircuit] && drawHUDText(formatTimeString(bestTimes[currentCircuit]), edge(-.04), .37, .06, WHITE, 'right');
             }
         }
+        enhancedMode && helpOpen && drawHelpCard(); // the HELP card over the menu (help.js)
     }
     else if (titleScreenMode)
     {
@@ -186,6 +189,7 @@ function drawHUD()
             drawHUDText('LAP '+(playerLap+1)+'/'+raceLaps, edge(-.035),.075, .045, WHITE, 'right');
             drawHUDText(levelInfo.name, edge(-.035),.115, .028, band, 'right');
             }
+            enhancedMode && drawHelpTips(); // the in-race tips until the first finish (help.js)
         }
     }
 
@@ -234,20 +238,20 @@ const menuRowX = () => enhancedMode && getAspect() < 1 ? .05 : edge(.05); // the
 
 // THE PORTRAIT MENU (enhanced only, a window taller than wide; Frank, 2026-09-14): one column in units of menuUnit() of the
 // height, min(aspect, .55), so it keeps its proportions from a phone to a portrait tablet and always fits: the logo small and
-// centred at the top (.14), BEST with the place and the time on one line (.3), the list (from .42, rows .08 apart at .06, the
+// centred at the top (.14), BEST with the place and the time on one line (.25), the list (from .35, rows .08 apart at .06, the
 // selected one .1), and at the bottom of the screen TEAM (its centre .125 up) with the map centred right above it (drawMap, its
 // centre .47 up; a taller window puts the spare height between the list and the map, Frank). menuRowX/Y/Size switch to it with
 // the test written out at each use, so the 13k build folds every one away
 const menuUnit = () => min(getAspect(), .55);
-const menuRowYTall = c => c == circuitCount ? 1-menuUnit()*.125 : menuUnit()*(.42 + c*.08 + (c > currentCircuit ? .05 : c == currentCircuit ? .025 : 0)); // TEAM locked to the bottom of the screen
-const menuRowSizeTall = c => menuUnit()*(c == circuitCount ? .15 : c == currentCircuit ? .1 : .06);
+const menuRowYTall = c => c > circuitCount ? 1-menuUnit()*.125 : menuUnit()*(.35 + c*.08 + (c > currentCircuit ? .05 : c == currentCircuit ? .025 : 0)); // PLAY (row circuitCount+1) locked to the bottom of the screen, CHANGE TEAM the list's last row spaced like the rest (2026-09-15: TEAM was at the bottom; the list started at .42 with a .03 gap before CHANGE TEAM, which reached the map from about aspect .53)
+const menuRowSizeTall = c => menuUnit()*(c > circuitCount ? .15 : c == currentCircuit ? .1 : .06); // PLAY big, CHANGE TEAM a list row
 
-// the portrait menu's TEAM button, centred under the map (Frank, 2026-09-14), in the craft's colour like the wide menu's: centred
+// the portrait menu's PLAY button, centred under the map (TEAM was, Frank 2026-09-14, until it joined the list on 2026-09-15): centred
 // on the middle of the canvas, its measured right edge in mouseX units is just its width, and menuRowAt mirrors that for the left
-function drawTeamCentred(shadow)
+function drawMenuCentred(c, text, color, shadow)
 {
-    drawHUDText('TEAM', .5, menuRowY(circuitCount), menuRowSize(circuitCount), playerVehicle.color, 'center', 'middle', shadow);
-    menuRowW[circuitCount] = mainContext.measureText('TEAM').width/mainCanvasSize.x;
+    drawHUDText(text, .5, menuRowY(c), menuRowSize(c), color, 'center', 'middle', shadow);
+    menuRowW[c] = mainContext.measureText(text).width/mainCanvasSize.x;
 }
 
 // the menu list's row centres (canvas fractions, drawn on the middle baseline): the
@@ -256,15 +260,15 @@ function drawTeamCentred(shadow)
 // size and menuRowW its measured right edge (in mouseX units, written as the menu draws),
 // so a click has to land on the name itself, not a fixed box (the dev regions() command
 // draws the boxes). Row circuitCount, the TEAM button, sits under the list
-const menuRowY = c => enhancedMode && getAspect() < 1 ? menuRowYTall(c) : .27 + c*.052 + (c > currentCircuit ? .045 : c == currentCircuit ? .022 : 0) + (c == circuitCount ? .17 : 0);
-const menuRowSize = c => enhancedMode && getAspect() < 1 ? menuRowSizeTall(c) : c == circuitCount ? .15 : c == currentCircuit ? .1 : .05, menuRowW = [];
+const menuRowY = c => enhancedMode && getAspect() < 1 ? menuRowYTall(c) : enhancedMode && c > circuitCount ? .9 : .27 + c*.052 + (c > currentCircuit ? .045 : c == currentCircuit ? .022 : 0) + (c == circuitCount ? enhancedMode ? 0 : .17 : 0); // enhanced: CHANGE TEAM ends the list after a gap and PLAY (row circuitCount+1) sits bottom left; the 13k build keeps TEAM at the bottom
+const menuRowSize = c => enhancedMode && getAspect() < 1 ? menuRowSizeTall(c) : c == (enhancedMode ? circuitCount + 1 : circuitCount) ? .15 : c == currentCircuit ? .1 : .05, menuRowW = []; // the bottom button at .15: TEAM in the 13k build, PLAY in the enhanced one (where CHANGE TEAM is a .05 list row)
 
 // the row under the pointer, locked ones and the TEAM button (row circuitCount) included,
 // or -1: on the name itself, .45 of its size each way
 const menuRowAt = () =>
 {
-    for (let c = 0; c <= circuitCount; ++c)
-        if (abs(mouseY - menuRowY(c)) < menuRowSize(c)*.45 && mouseX > (enhancedMode && getAspect() < 1 && c == circuitCount ? -menuRowW[c] : menuRowX()*2-1) && mouseX < menuRowW[c]) // the portrait menu's TEAM is centred: its left edge mirrors its right
+    for (let c = 0; c <= (enhancedMode ? circuitCount + 1 : circuitCount); ++c) // (the enhanced menu's row circuitCount+1 is PLAY)
+        if (abs(mouseY - menuRowY(c)) < menuRowSize(c)*.45 && mouseX > (enhancedMode && getAspect() < 1 && c > circuitCount ? -menuRowW[c] : menuRowX()*2-1) && mouseX < menuRowW[c]) // the portrait menu's TEAM is centred: its left edge mirrors its right
             return c;
     return -1;
 };

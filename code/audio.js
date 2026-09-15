@@ -78,6 +78,7 @@ function playSamples(samples, volume, rate, offset) // offset: seconds into the 
     source.connect(gainNode);
 
     source.start(0, offset);
+    enhancedMode && (source.volumeNode = gainNode); // the enhanced build fades the music out through it (musicFade)
     return source;
 }
 

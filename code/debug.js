@@ -98,9 +98,9 @@ function drawRegions()
 {
     const ctx = mainContext, W = mainCanvasSize.x, H = mainCanvasSize.y;
     ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1;
-    for (let c = 0; c <= circuitCount; ++c) // row circuitCount is the TEAM button
+    for (let c = 0; c <= circuitCount + 1; ++c) // row circuitCount is CHANGE TEAM, circuitCount+1 PLAY (the dev page is enhanced)
     {
-        const x0 = getAspect() < 1 && c == circuitCount ? (1-menuRowW[c])/2 : menuRowX(); // the portrait menu's TEAM is centred (menuRowAt)
+        const x0 = getAspect() < 1 && c > circuitCount ? (1-menuRowW[c])/2 : menuRowX(); // the portrait menu's TEAM is centred (menuRowAt)
         ctx.strokeRect(x0*W, (menuRowY(c)-menuRowSize(c)*.45)*H, ((menuRowW[c]+1)/2-x0)*W, menuRowSize(c)*.9*H);
     }
 }
