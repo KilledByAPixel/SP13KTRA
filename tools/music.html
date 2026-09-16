@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>SP13KTRA music bench</title>
+<style>
+:root{--bg:#07060c;--panel:#0f0d18;--line:rgba(255,255,255,.09);--text:#ece9f5;--dim:#8d88a3;--faint:#4a4660;--hue:0}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;padding:40px 24px 80px}
+main{max-width:980px;margin:0 auto}
+h1,h2,.display{font-family:"Archivo Black","Arial Black",Impact,sans-serif;font-weight:400;margin:0}
+h1{font-size:clamp(56px,11vw,112px);line-height:.9;letter-spacing:-.01em;
+   background:linear-gradient(90deg,#f33,#f93,#fe3,#3e6,#3cf,#66f,#c4f,#f33,#f93,#fe3,#3e6,#3cf,#66f,#c4f,#f33);
+   background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:spectrum 6s linear infinite}
+@keyframes spectrum{to{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){h1{animation:none}}
+.sub{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:10px 0 32px}
+.sub .display{font-size:22px;letter-spacing:.02em}
+.sub p{margin:0;color:var(--dim);max-width:60ch;font-size:14px}
+h2{font-size:18px;margin:44px 0 6px;letter-spacing:.02em}
+.hint{color:var(--dim);font-size:13px;margin:0 0 14px}
+button{font:inherit;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:6px;padding:7px 13px;cursor:pointer;transition:border-color .15s,background .15s}
+button:hover{border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.04)}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+/* now playing */
+.deck{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px 24px}
+.top{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+#play{width:64px;height:64px;border-radius:50%;border:0;background:hsl(var(--hue) 90% 60%);color:#07060c;font-size:22px;padding:0;flex:none;box-shadow:0 0 28px hsl(var(--hue) 90% 55% / .45)}
+#play:hover{filter:brightness(1.1)}
+.readout{flex:1;min-width:240px}
+#seedName{font-size:34px;line-height:1.05}
+#seedName small{font:500 14px system-ui,sans-serif;color:var(--dim);vertical-align:middle;margin-left:6px}
+#pos{color:var(--dim);font-variant-numeric:tabular-nums;font-size:14px;margin-top:4px}
+#pos b{color:var(--text);font-weight:600}
+.seedctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.seedctl input{font:600 16px system-ui,sans-serif;width:5.5em;text-align:center;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 4px;font-variant-numeric:tabular-nums}
+.vol{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:13px}
+.vol input{accent-color:hsl(var(--hue) 90% 60%);width:110px}
+
+#timeline{position:relative;height:46px;margin:22px 0 4px;border-radius:8px;overflow:hidden;cursor:pointer;background:#16131f}
+#timeline .sec{position:absolute;top:0;bottom:0;border-left:1px solid rgba(255,255,255,.12);padding:6px 9px;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden}
+#timeline .sec:first-child{border-left:0}
+#timeline .sec:hover{background:rgba(255,255,255,.05);color:var(--text)}
+#fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,transparent,hsl(var(--hue) 90% 60% / .28));pointer-events:none}
+#head{position:absolute;top:0;bottom:0;width:2px;left:0;background:hsl(var(--hue) 90% 65%);box-shadow:0 0 10px hsl(var(--hue) 90% 60%);pointer-events:none}
+
+.grid{display:grid;grid-template-columns:64px repeat(16,1fr) 96px;gap:4px;align-items:center;margin-top:20px}
+.grid .lab{font-size:12px;color:var(--dim)}
+.grid .note{font-size:11px;color:var(--faint);padding-left:6px;white-space:nowrap}
+.cell{height:20px;border-radius:3px;background:rgba(255,255,255,.04)}
+.cell:nth-child(18n+6),.cell:nth-child(18n+10),.cell:nth-child(18n+14){margin-left:4px}
+.cell.on{background:var(--c);opacity:.5}
+.cell.now{box-shadow:inset 0 0 0 1px rgba(255,255,255,.5)}
+.cell.on.now{opacity:1;box-shadow:0 0 14px var(--c)}
+.cell.on.mute{opacity:.14;box-shadow:none}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 24px;margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
+.facts dt{font-size:12px;color:var(--dim)}
+.facts dd{margin:0;font-size:15px}
+details{margin-top:18px}
+summary{cursor:pointer;color:var(--dim);font-size:13px}
+pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-radius:8px;padding:12px;margin:10px 0 0;max-height:320px;overflow:auto}
+
+/* circuits */
+#circuits{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;align-items:center;gap:9px;padding:8px 13px 8px 10px}
+.chip i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.chip span{font-family:"Archivo Black","Arial Black",sans-serif;font-size:13px;letter-spacing:.02em}
+.chip small{color:var(--dim);font-variant-numeric:tabular-nums}
+.chip.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:0 0 18px color-mix(in srgb,var(--c) 30%,transparent)}
+.rainbowdot{background:conic-gradient(#f33,#fe3,#3e6,#3cf,#66f,#c4f,#f33)!important}
+
+/* suggestions */
+.circ{margin-top:26px}
+.circ h3{font-family:"Archivo Black","Arial Black",sans-serif;font-weight:400;font-size:15px;margin:0;color:var(--c);letter-spacing:.02em}
+.circ .mood{color:var(--dim);font-size:13px;margin:0 0 8px}
+.cand{display:grid;grid-template-columns:78px 1fr;gap:12px;width:100%;text-align:left;border:0;border-left:2px solid transparent;border-radius:0 6px 6px 0;padding:7px 12px;margin:1px 0}
+.cand b{font-variant-numeric:tabular-nums;font-weight:600}
+.cand small{color:var(--dim);font-size:12.5px;line-height:1.45}
+.cand.ingame b::after{content:" ●";color:var(--c)}
+.cand.sel{border-left-color:var(--c);background:color-mix(in srgb,var(--c) 10%,transparent)}
+.cand.sel small{color:var(--text)}
+.stamp{color:var(--faint);font-size:12px;margin-top:30px}
+@media (max-width:640px){.grid{grid-template-columns:44px repeat(16,1fr)}.grid .note{display:none}.cand{grid-template-columns:64px 1fr}}
+</style>
+<script src=../code/font.js></script>
+</head>
+<body>
+<main>
+<h1>SP13KTRA</h1>
+<div class=sub>
+    <span class=display>music bench</span>
+    <p>Every circuit's soundtrack is baked at load from one small seed. Pick a seed and the whole loop is composed from it.</p>
+</div>
+
+<section class=deck>
+    <div class=top>
+        <button id=play onclick="toggle()" aria-label="Play">▶</button>
+        <div class=readout>
+            <div id=seedName class=display>seed 0</div>
+            <div id=pos>stopped</div>
+        </div>
+        <div class=seedctl>
+            <button onclick="pick(seedNow-1)" aria-label="Previous seed">‹</button>
+            <input type=number id=seed value=0 onchange="pick(+this.value)" aria-label="Seed">
+            <button onclick="pick(seedNow+1)" aria-label="Next seed">›</button>
+            <button onclick="pick(Math.random()*1e4|0)">Random</button>
+            <button onclick="pick(0)">Original</button>
+        </div>
+        <label class=vol>Volume <input type=range id=vol min=0 max=1 step=.05 value=.5 oninput="gain&&(gain.gain.value=this.value)"></label>
+    </div>
+
+    <div id=timeline title="Click to jump"><div id=fill></div><div id=head></div></div>
+    <div id=grid class=grid></div>
+    <dl id=facts class=facts></dl>
+    <details><summary>Raw draws</summary><pre id=desc></pre></details>
+</section>
+
+<h2>Circuits</h2>
+<p class=hint>The seed each circuit plays in the game.</p>
+<div id=circuits></div>
+
+<h2>Suggested seeds</h2>
+<p class=hint>Five per circuit, scored against a mood for each. ● marks the seed the circuit uses now.</p>
+<div id=cands></div>
+<p id=stamp class=stamp></p>
+</main>
+
+<script>const debug = 1, enhancedMode = 0, ASSERT = () => 0; let currentCircuit = 0; const circuitCount = 8;</script>
+<script src=../code/utilities.js></script>
+<script src=../code/audio.js></script>
+<script src=../code/sounds.js></script>
+<script src=../code/music.js></script>
+<script src=music-candidates.js></script>
+<script>
+const random = new Random; // the game's shared generator (game.js); musicBake seeds it
+const $ = id => document.getElementById(id);
+// name, hue (turns) and saturation per circuit, as circuitTable (levels.js)
+const circuits = [['REDSHIFT',0,.9],['FILAMENT',.06,.9],['SODIUM',.13,.9],['AURORA',.35,.8],['CHERENKOV',.6,.9],['ULTRAVIOLET',.78,.9],['UMBRA',.98,.12],['SP13KTRA',0,1]];
+const circuitColor = i => `hsl(${circuits[i][1]*360} ${circuits[i][2]*100}% ${i==6?55:60}%)`;
+const sections = [[0,'intro'],[32,'phrase 2'],[64,'phrase 3'],[96,'breakdown'],[112,'return'],[128]];
+
+// the tool's own player: one looping source over the baked loop, started at a beat offset
+let ctx, gain, src, loop, seedNow = -1, startTime = 0;
+const beatSeconds = () => (zzfxR*60/musicInfo.bpm|0)/zzfxR;
+function play(beat)
+{
+    stop();
+    ctx ||= new AudioContext;
+    gain ||= (g => (g.gain.value = $('vol').value, g.connect(ctx.destination), g))(ctx.createGain());
+    const b = ctx.createBuffer(1, loop.length, zzfxR);
+    b.getChannelData(0).set(loop);
+    src = ctx.createBufferSource();
+    src.buffer = b; src.loop = true; src.connect(gain);
+    src.start(0, beat*beatSeconds());
+    startTime = ctx.currentTime - beat*beatSeconds();
+    $('play').textContent = '■'; $('play').ariaLabel = 'Stop';
+}
+function stop()
+{
+    src && src.stop(); src = 0;
+    $('play').textContent = '▶'; $('play').ariaLabel = 'Play';
+    $('pos').textContent = 'stopped';
+    $('head').style.left = $('fill').style.width = '0';
+    paintGrid(-1);
+}
+function toggle() { src ? stop() : play(0); }
+function jump(beat) { play(beat); }
+function position() { return src ? ((ctx.currentTime - startTime)/beatSeconds())%128 : 0; }
+
+// the draws in words (music.js musicBake documents each one)
+function describe(m)
+{
+    const note = ['A','B♭','B','C','C♯','D','E♭','E','F','F♯','G','A♭'][(m.key%12+12)%12],
+        scale = ['minor pentatonic','major pentatonic','in-sen','suspended pentatonic'][m.scale.join()==[0,3,5,7,10,12]+''?0:m.scale.join()==[0,2,4,7,9,12]+''?1:m.scale.join()==[0,1,5,7,8,12]+''?2:3],
+        groove = ['four on the floor','two-step','half time','busy floor','electro','broken beat','heartbeat','barely there'][[0x1111,0x0401,0x0409,0x5111,0x0441,0x0821,0x0101,0x0001].indexOf(m.G[0])],
+        stride = {1:'climbs',5:'falls',2:'leaps in thirds',4:'leaps in fifths',3:'rocks'}[m.J],
+        phrases = [0,1,2,3].filter(k => m.leadPhrases>>k&1).map(k => k+1),
+        late = ['kick','snare','hat','bass'].map((p,k) => m.F[k] && `${p} on ${m.F[k]}`).filter(Boolean);
+    return [
+        ['Tempo', m.bpm+' bpm'],
+        ['Key', `${note} ${scale}`],
+        ['Groove', groove],
+        ['Drums', `${['full','half','barely there'][[1,.5,.2].indexOf(m.DG)]}, ${m.D?'long snare, open hat':'short snare, closed hat'}${m.K?`, tuned ${m.K>0?'+':''}${m.K}`:''}`],
+        ['Bass', `${m.B?'saw':'square'}${m.BM?', walking':''}`],
+        ['Lead', phrases.length ? `${['saw','held triangle','square pluck'][m.T]} in ${m.S?'8ths':'16ths'}, ${stride}${m.O?', octave up':''}${m.LG>1?', forward':''}` : 'none'],
+        ['Pad', m.P ? 'root and fifth' : 'off'],
+        ['Echo', m.E ? 'dotted 16th' : 'dotted 8th'],
+        ['Arrangement', late.length ? late.join(', ') : 'everything from the top'],
+    ];
+}
+
+// the step grid: a row per part, its 16-step pattern, lit as the playhead passes
+const parts = [['kick','#ff4d4d'],['snare','#ff9a3d'],['hat','#ffe14d'],['bass','#3dd6ff'],['lead','#c46bff']];
+function buildGrid()
+{
+    const m = musicInfo, bits = [m.G[0], m.G[1], m.hatBits, m.bassBits, m.leadBits],
+        notes = [m.F[0]&&'in on '+m.F[0], m.G[1]?m.F[1]&&'in on '+m.F[1]:'no snare', m.F[2]&&'in on '+m.F[2], m.F[3]&&'in on '+m.F[3], m.leadPhrases?'':'no lead'];
+    $('grid').innerHTML = parts.map(([n,c],r) =>
+        `<span class=lab>${n}</span>`+[...Array(16)].map((_,i) => `<i class="cell${bits[r]>>i&1?' on':''}" style="--c:${c}"></i>`).join('')+`<span class=note>${notes[r]||''}</span>`).join('');
+}
+function audible(r, b)
+{
+    const m = musicInfo, brk = b>=96 && b<112;
+    return [!brk && b>=m.F[0], !brk && b>=m.F[1], b>=m.F[2] && (!brk || b>105), b>=m.F[3] && b<96, m.leadPhrases>>(b>>5)&1 && b<123][r];
+}
+function paintGrid(beat)
+{
+    const step = beat*4&15, b = beat|0;
+    $('grid').querySelectorAll('.cell').forEach((e,k) =>
+    {
+        e.classList.toggle('now', beat>=0 && k%16==step);
+        e.classList.toggle('mute', beat>=0 && !audible(k/16|0, b));
+    });
+}
+
+// bake a seed and show it (start it from the top unless asked not to)
+function load(seed, autoplay)
+{
+    seedNow = seed;
+    $('seed').value = seed;
+    loop = musicBake(seed);
+    const ci = musicSeeds.indexOf(seed);
+    document.documentElement.style.setProperty('--hue', ci>=0 && ci!=6 ? circuits[ci][1]*360 : 330);
+    $('seedName').innerHTML = 'seed '+seed+(seed ? '' : ' <small>the original</small>');
+    document.querySelectorAll('#circuits .chip').forEach((b,k) => b.classList.toggle('on', musicSeeds[k]==seed));
+    document.querySelectorAll('#cands .cand').forEach(b => b.classList.toggle('sel', +b.dataset.seed==seed));
+    $('facts').innerHTML = describe(musicInfo).map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+    $('desc').textContent = JSON.stringify(musicInfo, 0, 1);
+    buildGrid();
+    autoplay ? play(0) : paintGrid(-1);
+}
+const pick = seed => load(seed, 1);
+
+$('timeline').insertAdjacentHTML('afterbegin', sections.slice(0,-1).map(([b,n],k) =>
+    `<div class=sec style="left:${b/1.28}%;width:${(sections[k+1][0]-b)/1.28}%">${n}</div>`).join(''));
+$('timeline').onclick = e => { const r = $('timeline').getBoundingClientRect(); jump(((e.clientX-r.left)/r.width*8|0)*16); };
+$('circuits').innerHTML = circuits.map(([n],i) =>
+    `<button class=chip style="--c:${circuitColor(i)}" onclick="pick(musicSeeds[${i}])"><i${i==7?' class=rainbowdot':''}></i><span>${n}</span><small>${musicSeeds[i]}</small></button>`).join('');
+$('stamp').textContent = typeof musicCandidatesStamp == 'string' ? `Suggestions ${musicCandidatesStamp} (tools/music-candidates-gen.js; stale if the draws in music.js changed since).` : 'No stamp: suggestions from the old tool, stale.';
+$('cands').innerHTML = (typeof musicCandidates == 'object' ? musicCandidates : []).map((c,i) =>
+    `<div class=circ style="--c:${circuitColor(i)}"><h3>${c.name}</h3><p class=mood>${c.mood}</p>`+
+    c.seeds.map(s => `<button class="cand${musicSeeds[i]==s.seed?' ingame':''}" data-seed=${s.seed} onclick="pick(${s.seed})"><b>${s.seed}</b><small>${s.note}</small></button>`).join('')+'</div>').join('');
+
+// Space plays and stops, the arrow keys step through seeds
+onkeydown = e =>
+{
+    if (e.target.tagName == 'INPUT') return;
+    if (e.code == 'Space') { e.preventDefault(); toggle(); }
+    if (e.code == 'ArrowLeft') pick(seedNow-1);
+    if (e.code == 'ArrowRight') pick(seedNow+1);
+};
+
+load(musicSeeds[0]); // (no autoplay before a click)
+(function tick()
+{
+    if (src)
+    {
+        const beat = position(), sec = sections.findLast(s => s[0] <= beat)[1];
+        $('pos').innerHTML = `<b>${sec}</b> &nbsp; beat <b>${(beat|0)+1}</b>/128 &nbsp; bar <b>${(beat/4|0)+1}</b> &nbsp; phrase <b>${(beat/32|0)+1}</b>`;
+        $('head').style.left = $('fill').style.width = beat/1.28+'%';
+        paintGrid(beat);
+    }
+    requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
