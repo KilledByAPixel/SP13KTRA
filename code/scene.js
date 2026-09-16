@@ -18,7 +18,8 @@ let skyMesh, skyKitMesh;
 // the sun's yaw walks the circuits, 2.4 rad on from REDSHIFT's -.59 (the original, ahead-left of the start
 // straight): until 2026-09-13 every sun stood in the same place against its start straight and lit every
 // skyline the same way. It is the key light too, so the hulls and every face change with it
-const sunDirection=()=>{const a=currentCircuit*2.4-.59;return vec3(.9*Math.sin(a),levelInfo.sky&1?.15:.3,.9*Math.cos(a)).normalize();};
+const umbraSunYaw=3.2; // UMBRA's eclipse sat 71 degrees off the start straight at the top edge of the sky the race camera sees, so it was easy to miss (Frank, 2026-09-16). Enhanced only: the 13k build is the jam entry being voted on
+const sunDirection=()=>{const a=enhancedMode&&currentCircuit==6?umbraSunYaw:currentCircuit*2.4-.59;return vec3(.9*Math.sin(a),levelInfo.sky&1?.15:.3,.9*Math.cos(a)).normalize();};
 
 ///////////////////////////////////////////////////////////////////////////////
 // draw order: sky gradient and kit, then opaque road/architecture/craft with depth,

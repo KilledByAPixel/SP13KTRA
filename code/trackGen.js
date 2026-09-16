@@ -38,11 +38,12 @@ function buildTrack()
     ////////////////////////////////////////////////////////////////////////////
     // Skeleton: the authored corner polygon. Every circuit is preset, nothing is rerolled.
     let corners=circuitCorners[currentCircuit];
-    // SODIUM and UMBRA run the other way in the enhanced build (Frank, 2026-09-16: every circuit turned the same way). Their corner
-    // polygons are mirrored ABOUT THEIR OWN CENTRE in x, not about zero, so each loop keeps the same footprint and the map draws it in
-    // the same place; every corner reverses and everything derived follows (turn signs, the racing line, chevron sides, and pads and
-    // strips, which land in new spots). The 13k build is the jam entry being voted on, so its circuits never change: this folds away there
-    if(enhancedMode && (currentCircuit==2 || currentCircuit==6))
+    // SODIUM and CHERENKOV run the other way in the enhanced build (Frank, 2026-09-16: every circuit turned the same way; UMBRA was the
+    // second one for an hour and played too hard reversed). Their corner polygons are mirrored ABOUT THEIR OWN CENTRE in x, not about
+    // zero, so each loop keeps the same footprint and the map draws it in the same place; every corner reverses and everything derived
+    // follows (turn signs, the racing line, chevron sides, and pads and strips, which land in new spots). The 13k build is the jam entry
+    // being voted on, so its circuits never change: this folds away there
+    if(enhancedMode && (currentCircuit==2 || currentCircuit==4))
     {
         const xs=corners.map(c=>c[0]), twiceCentre=min(...xs)+max(...xs);
         corners=corners.map(c=>[twiceCentre-c[0],...c.slice(1)]);
