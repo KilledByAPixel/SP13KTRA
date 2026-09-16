@@ -23,10 +23,24 @@ let wdQueue = Promise.resolve(); // cloud syncs run one at a time: two would int
 // a failed SDK call says why in the console (the enhanced build keeps console): a playtest that shows no board or toast can be read in devtools
 const wdWarn = (what, r) => console.warn('Wavedash: ' + what + ' failed', r && r.message || r);
 
+// circuit c's leaderboard id, a promise, asked for once and cached (0 after a failure, so the next finish asks again). ONLY
+// getOrCreateLeaderboard creates a board: the REST admin route can set a board's displayName and visible but answers "Leaderboard
+// not found" for one that does not exist yet (2026-09-15), so a circuit nobody had finished had no board to show. wdInit asks for
+// all eight at startup, and every board is then there to be named and shown in the portal
+const wdBoard = c =>
+{
+    const board = 'TRACK_' + (c+1);
+    return wdBoards[c] ||= wd().getOrCreateLeaderboard(board, 0, 2) // ascending, shown as milliseconds
+        .then(r => r.success ? r.data.id : (wdWarn('getOrCreateLeaderboard ' + board, r), wdBoards[c] = 0))
+        .catch(e => (wdWarn('getOrCreateLeaderboard ' + board, e), wdBoards[c] = 0));
+};
+
 function wdInit()
 {
     if (!wd()) return;
     wd().init(); // until this runs the platform shows its loading screen over the game
+    for (let c = 0; c < circuitCount; ++c)
+        wdBoard(c); // every circuit's board exists from the first launch, not from the first finish there
     // input.js consumes only printable keys, so the arrow keys would scroll the Wavedash page around the game
     addEventListener('keydown', e => e.key.startsWith('Arrow') && e.preventDefault());
     wdAchieve(); // from this device's save
@@ -42,9 +56,7 @@ function wdFinish()
     // warning for one diagnostic playtest, which proved the uploads land: rank 1 on TRACK_1, 2026-09-15)
     let answered = 0;
     setTimeout(() => answered || console.warn('Wavedash: ' + board + ' upload still unanswered after 10 s'), 1e4);
-    (wdBoards[c] ||= wd().getOrCreateLeaderboard(board, 0, 2) // ascending, shown as milliseconds
-        .then(r => r.success ? r.data.id : (wdWarn('getOrCreateLeaderboard ' + board, r), wdBoards[c] = 0))
-        .catch(e => (wdWarn('getOrCreateLeaderboard ' + board, e), wdBoards[c] = 0)))
+    wdBoard(c)
         .then(id => id ? wd().uploadLeaderboardScore(id, score, true) : (answered = 1, 0)) // no board: its failure has warned already
         .then(r => (answered = 1, r && (r.success ? console.log('Wavedash: ' + board + ' score ' + score + ' ms uploaded, rank ' + r.data?.globalRank, r.data) : wdWarn('uploadLeaderboardScore ' + board, r))))
         .catch(e => (answered = 1, wdWarn('uploadLeaderboardScore ' + board, e)));

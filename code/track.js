@@ -412,9 +412,12 @@ function buildScenery(w)
     // plan queries against the minimap samples (every 8th route sample): the distance to the
     // nearest one, and an even-odd inside-the-loop test. (It returned the road height there
     // as well until 2026-09-13: only the no-ground-plane branch of piece() ever read it)
-    const nearest=(x,z)=>{
-        let d=1e9;
-        for(const [px,pz] of trackMapPts) d=min(d,Math.hypot(x-px,z-pz));
+    // the SQUARE of that distance: every caller compares it against a threshold, so the square root never has to be taken and
+    // Math.hypot, which guards against overflows these numbers cannot reach, goes with it. Each threshold below is squared to match
+    // (2026-09-15: 500 route points times a thousand candidate spots)
+    const near2=(x,z)=>{
+        let d=1e18;
+        for(const [px,pz] of trackMapPts) d=min(d,(x-px)**2+(z-pz)**2);
         return d;
     };
     const inside=(x,z)=>{
@@ -431,8 +434,8 @@ function buildScenery(w)
     // no-ground branch that hung pieces under the road went on 2026-09-13). Three in four speak
     // the circuit's shape language, the rest the (theme+3)%8 language. Returns 1 if it was placed.
     const piece=(x,z,h,radius,yaw,color)=>{
-        const d=nearest(x,z); let y=groundY;
-        if(d<w+radius*2+500) return 0; // never inside the road or its walls (radius*2: the floating slab reaches twice its radius sideways; 1.5 let it overhang the wall)
+        const clear=w+radius*2+500; let y=groundY;
+        if(near2(x,z)<clear**2) return 0; // never inside the road or its walls (radius*2: the floating slab reaches twice its radius sideways; 1.5 let it overhang the wall)
         debug && skylineSites.push([x,z,radius*2,h]);
         // the height envelope (2026-09-13): one slow wave over the ground scales every piece by .5-1.5, so
         // neighbours share a ridge or a shelf instead of each rolling its own height (a wavelength of about
@@ -497,8 +500,8 @@ function buildScenery(w)
     for(let g=0,tries=0;g<60*levelInfo.density&&tries<900;++tries)
     {
         const p=sampleRoute(random.int(N)*trackSegmentLength,random.sign()*(w+random.float(4000,25000))),
-            x=p.x, z=p.z, d=nearest(x,z);
-        if(d<w+4000 || theme!=1 && inside(x,z)) continue;
+            x=p.x, z=p.z;
+        if(near2(x,z)<(w+4000)**2 || theme!=1 && inside(x,z)) continue;
         ++g;
         // a district: one colour from the palette per group, so colour reads as place
         const yaw=random.float(2*PI), count=random.int(3,8), color=palette[random.int(3)].lerp(BLACK,random.float(.3));
@@ -515,8 +518,8 @@ function buildScenery(w)
     for(let tries=0;tries<1000;++tries) // (scenery bit 1 skipped the infield entirely for an open vista; no circuit set it, and it went on 2026-09-13)
     {
         const x=c.x+random.float(-trackMapRadius,trackMapRadius), z=c.z+random.float(-trackMapRadius,trackMapRadius),
-            h=random.float(4000,26000), r=h*random.float(.12,.2), d=nearest(x,z);
-        if(d<w+r*1.5+2500 || !inside(x,z) || placed.some(([px,pz,pr])=>Math.hypot(x-px,z-pz)<(r+pr)*(levelInfo.scenery&128?1.5:3)+3000)) continue;
+            h=random.float(4000,26000), r=h*random.float(.12,.2);
+        if(near2(x,z)<(w+r*1.5+2500)**2 || !inside(x,z) || placed.some(([px,pz,pr])=>(x-px)**2+(z-pz)**2<((r+pr)*(levelInfo.scenery&128?1.5:3)+3000)**2)) continue;
         placed.push([x,z,r]);
         piece(x,z,h,r,random.float(2*PI),palette[random.int(3)].lerp(BLACK,.3));
     }
@@ -525,8 +528,8 @@ function buildScenery(w)
     const giant=levelInfo.scenery&2?2:1; // scenery bit 2: colossal giants, twice the size
     for(let g=0,tries=0;g<12&&tries<400;++tries)
     {
-        const x=c.x+random.float(-R-50000,R+50000), z=c.z+random.float(-R-50000,R+50000), d=nearest(x,z);
-        if(d<25000 || d>80000) continue;
+        const x=c.x+random.float(-R-50000,R+50000), z=c.z+random.float(-R-50000,R+50000), d=near2(x,z);
+        if(d<25000**2 || d>80000**2) continue;
         g+=piece(x,z,random.float(15000,30000)*giant,random.float(2500,4000)*giant,random.float(2*PI),dark);
     }
 }

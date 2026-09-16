@@ -129,8 +129,13 @@ class Mesh
             data=new Float32Array(this.points.length*12);
             for(let i=0;i<this.points.length;++i)
             {
-                const p=this.points[i], n=this.normals[i], c=this.colors[i]||WHITE;
-                data.set([p.x,p.y,p.z,this.mats[i]||0,n.x,n.y,n.z,0,c.r,c.g,c.b,c.a],i*12);
+                const p=this.points[i], n=this.normals[i], c=this.colors[i]||WHITE, j=i*12;
+                // enhanced: the twelve floats written out, no array per vertex (glPushVert does the same); the specularity slot stays the
+                // zero a fresh Float32Array already holds. The 13k build keeps the short form and folds this away
+                if(enhancedMode)
+                    data[j]=p.x, data[j+1]=p.y, data[j+2]=p.z, data[j+3]=this.mats[i]||0, data[j+4]=n.x, data[j+5]=n.y, data[j+6]=n.z, data[j+8]=c.r, data[j+9]=c.g, data[j+10]=c.b, data[j+11]=c.a;
+                else
+                    data.set([p.x,p.y,p.z,this.mats[i]||0,n.x,n.y,n.z,0,c.r,c.g,c.b,c.a],j);
             }
         }
         this.buf=glContext.createBuffer();
@@ -169,8 +174,20 @@ class Mesh
     {
         const m = buildMatrix(pos, rot, scale);
         const m2 = buildMatrix(0, rot); // normals only turn: the kit's faces are axis aligned or near enough
-        this.points.push(...mesh.points.map(p=>p.transform(m)));
-        this.normals.push(...mesh.normals.map(p=>p.transform(m2)));
+        // the matrices' components read once, then every vertex through plain arithmetic: transformPoint allocated a DOMPoint each, a
+        // tenth of a world build (2026-09-15, local/world-hash-probe.js: 627 ms to 558 ms, every circuit's world hash identical).
+        // Pushing in a loop instead of map+spread drops a temporary array per piece too. The 13k build keeps the old path, 76 bytes cheaper
+        if (enhancedMode)
+        {
+            const f = matrixFloats(m), f2 = matrixFloats(m2);
+            for(const p of mesh.points) this.points.push(matrixApply(f, p.x, p.y, p.z));
+            for(const n of mesh.normals) this.normals.push(matrixApply(f2, n.x, n.y, n.z));
+        }
+        else
+        {
+            this.points.push(...mesh.points.map(p=>p.transform(m)));
+            this.normals.push(...mesh.normals.map(p=>p.transform(m2)));
+        }
         for(const p of mesh.points) this.colors.push(color), this.mats.push(mat);
         return this;
     }

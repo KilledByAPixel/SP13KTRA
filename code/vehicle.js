@@ -388,7 +388,7 @@ function stepVehicle(v,c,dt)
     // (a POWER SLIDE, brake+steer at speed with a low grip, a carve and a charged release burst,
     // went on 2026-09-13: Frank could not get it to work and took the hardest corners faster off
     // the gas; the brake came back the same day as a plain slow-down: Down, the middle button)
-    v.playerTurn=lerp(.3,v.playerTurn,c.steer); // the visual lean
+    v.playerTurn=lerp(.3,v.playerTurn,c.steer)||0; // the visual lean (||0: a non-finite state is steered by controls the AI worked out from it, and craftMatrix's DOMMatrix throws on a NaN lean, losing every later frame, since a lerp from NaN stays NaN; the recovery above reseats the craft but this frame's steer is already poisoned. test/world-systems.js's "invalid movement safely recovers")
 
     // heading rate: steerRate above 10,500, so the turning radius IS the speed and slowing down
     // turns you tighter (the knee was 21,000 until 2026-09-13: from 9,450 up the radius was a flat

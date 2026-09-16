@@ -282,7 +282,22 @@ function glPush(points,normals,color)
 // recharge strip) plus the nofog bit; specularity is the current glSpecularity
 function glPushVert(p,n,c)
 {
-    const data=[p.x,p.y,p.z,glEmissive+2*!glEnableFog,n.x,n.y,n.z,glSpecularity,c.r,c.g,c.b,c.a];
-    if(glCapture) glCapture.push(...data);
-    else glVertexData.set(data,glBatchCount++*12);
+    const m=glEmissive+2*!glEnableFog;
+    // the enhanced build writes the twelve floats out: a world build pushes hundreds of thousands of vertices and the temporary array
+    // per vertex was pure garbage (2026-09-15). The 13k build keeps the short form, 45 zip bytes cheaper, and folds this away
+    if(enhancedMode)
+    {
+        if(glCapture) glCapture.push(p.x,p.y,p.z,m,n.x,n.y,n.z,glSpecularity,c.r,c.g,c.b,c.a);
+        else
+        {
+            const d=glVertexData, i=glBatchCount++*12;
+            d[i]=p.x, d[i+1]=p.y, d[i+2]=p.z, d[i+3]=m, d[i+4]=n.x, d[i+5]=n.y, d[i+6]=n.z, d[i+7]=glSpecularity, d[i+8]=c.r, d[i+9]=c.g, d[i+10]=c.b, d[i+11]=c.a;
+        }
+    }
+    else
+    {
+        const data=[p.x,p.y,p.z,m,n.x,n.y,n.z,glSpecularity,c.r,c.g,c.b,c.a];
+        if(glCapture) glCapture.push(...data);
+        else glVertexData.set(data,glBatchCount++*12);
+    }
 }

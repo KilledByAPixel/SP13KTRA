@@ -49,6 +49,13 @@ function buildMatrix(pos, rot, scale)
 }
 
 
+// A DOMMatrix's twelve affine components as plain numbers, and a point through them. transformPoint allocates a DOMPoint per call and
+// crosses into the browser's matrix code: building a world was a fifth of its time in there (2026-09-15, local/world-hash-probe.js).
+// The components are read ONCE per matrix and many points pushed through them (Mesh.combine); the arithmetic is transformPoint's own,
+// with no perspective divide, which it does not do either, so the output is identical
+const matrixFloats = m => [m.m11, m.m12, m.m13, m.m21, m.m22, m.m23, m.m31, m.m32, m.m33, m.m41, m.m42, m.m43];
+const matrixApply = (f, x, y, z) => vec3(f[0]*x + f[3]*y + f[6]*z + f[9], f[1]*x + f[4]*y + f[7]*z + f[10], f[2]*x + f[5]*y + f[8]*z + f[11]);
+
 // race clock for the HUD and results, m:ss.mmm
 function formatTimeString(t)
 {
@@ -99,6 +106,8 @@ class Vector3
     {
         // full affine transform (translation included): points, not directions.
         // draw.js transforms normals with a rotation-only matrix for that reason
+        if (enhancedMode) // the 13k build keeps transformPoint: the plain arithmetic is faster but cost 76 zip bytes there (2026-09-15)
+            return matrixApply(matrixFloats(matrix), this.x, this.y, this.z);
         const p = matrix.transformPoint(this);
         return vec3(p.x, p.y, p.z);
     }
