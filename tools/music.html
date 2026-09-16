@@ -258,8 +258,11 @@ function show(seed, randomHue)
     $('seed').value = seed;
     const ci = musicSeeds.indexOf(seed);
     // a circuit's seed takes its colour, Random takes any circuit's colour but UMBRA's grey, and any other seed keeps the colour it has
-    const hue = ci>=0 && ci!=6 ? ci : randomHue ? [0,1,2,3,4,5,7][Math.random()*7|0] : -1;
-    hue>=0 && document.documentElement.style.setProperty('--hue', circuits[hue][1]*360);
+    // (a random one is never the colour showing now; SP13KTRA's red is REDSHIFT's, so it is left out of the draw)
+    const root = document.documentElement.style, now = +root.getPropertyValue('--hue'),
+        others = [0,1,2,3,4,5].filter(k => circuits[k][1]*360 != now),
+        hue = ci>=0 && ci!=6 ? ci : randomHue ? others[Math.random()*others.length|0] : -1;
+    hue>=0 && root.setProperty('--hue', circuits[hue][1]*360);
     $('seedName').innerHTML = 'seed '+seed+(seed ? '' : ' <small>the original</small>');
     document.querySelectorAll('#circuits .chip').forEach((b,k) => b.classList.toggle('on', musicSeeds[k]==seed));
     document.querySelectorAll('#cands .cand').forEach(b => b.classList.toggle('sel', +b.dataset.seed==seed));
