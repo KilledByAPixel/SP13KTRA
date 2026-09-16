@@ -34,7 +34,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
 .readout{flex:1;min-width:240px}
 #seedName{font-size:34px;line-height:1.05}
 #seedName small{font:500 14px system-ui,sans-serif;color:var(--dim);vertical-align:middle;margin-left:6px}
-.namerow{display:flex;align-items:baseline;gap:4px 14px;flex-wrap:wrap}
+.namerow{display:flex;flex-direction:column;gap:2px}
 #djnext{color:var(--dim);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
 #djnext b{color:hsl(var(--hue) 90% 65%);font-weight:600}
 #pos{color:var(--dim);font-variant-numeric:tabular-nums;font-size:14px;margin-top:4px}
@@ -271,7 +271,7 @@ function show(seed, randomHue)
     buildGrid();
 }
 
-// AUTO DJ: each seed plays two or three whole loops, then a random one takes over on the loop
+// AUTO DJ: each seed plays two whole loops, then a random one takes over on the loop
 // boundary. The next loop is baked a couple of seconds early and started on the audio clock at
 // that boundary, the old source stopped at the same instant, so the change is seamless; the page
 // follows once the clock passes it. Any manual pick restarts the count (play calls djPlan).
@@ -279,7 +279,7 @@ let djEnd = 0, djNext = 0;
 function djPlan(beat)
 {
     // the loops still to play: the one under way counts only if it started from the top
-    djEnd = startTime + loopSeconds()*(2 + (Math.random()*2|0) + (beat>0));
+    djEnd = startTime + loopSeconds()*(2 + (beat>0));
 }
 function djCancel()
 {
