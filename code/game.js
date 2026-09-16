@@ -144,6 +144,7 @@ function gameStart()
         // Enhanced build only: in the 13k build it cost 28 bytes
         if(enhancedMode) for(;frame<180;) time=frame++/frameRate, updateCars();
     }
+    enhancedMode && (craftCameras=[]); // a new field: the kept cameras belong to the old craft objects
     if(debug) debugSkipped=0; // a fresh race can set a record again
     cameraRot.y=playerVehicle.heading;
     for(let i=99;i--;) updateCamera(); // run the camera's easing to rest so the first frame is seated
@@ -214,14 +215,18 @@ function gameUpdateInternal()
                 playerCraft = mod(playerCraft + craft, 6);
                 sound_checkpoint.play(.5);
                 playerVehicle = vehicles.find(v=>v.racerIndex==playerCraft);
-                cameraRot.y = playerVehicle.heading;
-                for(let i=60;i--;) updateCamera();
-                // the warm-up settles the camera on its target with the craft frozen, but in
-                // motion the position ease trails the target by about 2.3 frames of travel,
-                // so the camera then fell back over a dozen frames (measured): start it at that lag
-                // (measured at .22 and again at .3, the post-deadline ease: the camera then moves 9 units
-                // over the next 40 frames, against 112 at 2.6 and 275 at 1.6; local/camera-setback-probe.js)
-                cameraPos.addSelf(playerVehicle.velocity.scale(-timeDelta*2.3));
+                // the enhanced build has been keeping a camera behind this craft all along (craftCameras), so the cut lands on one
+                // already in the moving steady state. The 13k build re-seats with the craft frozen, which is close but not seated:
+                // measured drift after the cut, 37 units kept against 658 frozen, and 1012 with the old 2.3-frame setback, which
+                // shoved the camera 2,545 units back and let it slide forward for 40 frames (local/camera-switch-probe.js, 2026-09-16)
+                const kept = enhancedMode && craftCameras[playerCraft];
+                if (kept)
+                    cameraPos = kept.pos, cameraRot = kept.rot;
+                else
+                {
+                    cameraRot.y = playerVehicle.heading;
+                    for(let i=60;i--;) updateCamera();
+                }
                 writeSaveData(); // the craft choice is saved
             }
         }
@@ -373,6 +378,7 @@ function gameUpdate(frameTimeMS=0)
             sound_checkpoint.play(.5,.5);
         }
 
+        enhancedMode && titleScreenMode && menuMode && updateCraftCameras(); // before the real camera, so it leaves the globals as it found them
         updateCamera();
 
         inputUpdatePost();
@@ -416,6 +422,25 @@ function enhancedModeUpdate()
 ///////////////////////////////
 // the chase camera: behind and above the player, following the travel direction,
 // kept above the nearby road. The dev free camera (debug.js) overrides it at the end.
+
+// enhanced only: while the menu is up, keep a camera behind every selectable craft as if it were the player's, so changing team cuts to
+// one already in the MOVING steady state. Re-seating with the craft frozen lands close but not seated, and the camera then slides into
+// place over half a second, which is the glitch (drift after the cut: 37 units kept, 658 frozen; local/camera-switch-probe.js, 2026-09-16).
+// updateCamera works on the globals, so they are swapped around each craft's run and put back
+let craftCameras = [];
+function updateCraftCameras()
+{
+    const v0=playerVehicle, pos0=cameraPos, rot0=cameraRot, roll0=cameraRoll, fov0=boostFov;
+    for(const v of vehicles)
+        if(v.racerIndex<6 && v!=v0)
+        {
+            const k=craftCameras[v.racerIndex] ||= {pos:pos0.scale(1), rot:rot0.scale(1)};
+            playerVehicle=v, cameraPos=k.pos, cameraRot=k.rot;
+            updateCamera();
+            k.pos=cameraPos, k.rot=cameraRot;
+        }
+    playerVehicle=v0, cameraPos=pos0, cameraRot=rot0, cameraRoll=roll0, boostFov=fov0;
+}
 
 function updateCamera()
 {
