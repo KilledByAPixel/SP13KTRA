@@ -108,7 +108,7 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
             <button onclick="pick(seedNow-1)" aria-label="Previous seed">‹</button>
             <input type=number id=seed value=0 onchange="pick(+this.value)" aria-label="Seed">
             <button onclick="pick(seedNow+1)" aria-label="Next seed">›</button>
-            <button onclick="pick(Math.random()*1e4|0)">Random</button>
+            <button onclick="load(Math.random()*1e4|0, 1, 1)">Random</button>
             <button onclick="pick(0)">Original</button>
         </div>
         <div class=opts>
@@ -222,14 +222,16 @@ function paintGrid(beat)
 }
 
 // bake a seed and show it (start it from the top unless asked not to)
-function load(seed, autoplay)
+function load(seed, autoplay, randomHue)
 {
     const from = src && $('keep').checked ? position() : 0; // read before the bake changes the tempo
     seedNow = seed;
     $('seed').value = seed;
     loop = musicBake(seed);
     const ci = musicSeeds.indexOf(seed);
-    document.documentElement.style.setProperty('--hue', ci>=0 && ci!=6 ? circuits[ci][1]*360 : 330);
+    // a circuit's seed takes its colour, Random takes any circuit's colour but UMBRA's grey, and any other seed keeps the colour it has
+    const hue = ci>=0 && ci!=6 ? ci : randomHue ? [0,1,2,3,4,5,7][Math.random()*7|0] : -1;
+    hue>=0 && document.documentElement.style.setProperty('--hue', circuits[hue][1]*360);
     $('seedName').innerHTML = 'seed '+seed+(seed ? '' : ' <small>the original</small>');
     document.querySelectorAll('#circuits .chip').forEach((b,k) => b.classList.toggle('on', musicSeeds[k]==seed));
     document.querySelectorAll('#cands .cand').forEach(b => b.classList.toggle('sel', +b.dataset.seed==seed));
