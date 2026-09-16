@@ -15,6 +15,8 @@ h1{font-size:clamp(56px,11vw,112px);line-height:.9;letter-spacing:-.01em;
    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:spectrum 6s linear infinite}
 @keyframes spectrum{to{background-position:-100% 0}}
 @media (prefers-reduced-motion:reduce){h1{animation:none}}
+.titlerow{display:flex;align-items:flex-end;gap:28px;flex-wrap:wrap}
+#scope{flex:1 1 200px;min-width:0;height:clamp(50px,9.9vw,100px);display:block}
 .sub{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:10px 0 32px}
 .sub .display{font-size:22px;letter-spacing:.02em}
 .sub p{margin:0;color:var(--dim);max-width:60ch;font-size:14px}
@@ -32,6 +34,9 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
 .readout{flex:1;min-width:240px}
 #seedName{font-size:34px;line-height:1.05}
 #seedName small{font:500 14px system-ui,sans-serif;color:var(--dim);vertical-align:middle;margin-left:6px}
+.namerow{display:flex;align-items:baseline;gap:4px 14px;flex-wrap:wrap}
+#djnext{color:var(--dim);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+#djnext b{color:hsl(var(--hue) 90% 65%);font-weight:600}
 #pos{color:var(--dim);font-variant-numeric:tabular-nums;font-size:14px;margin-top:4px}
 #pos b{color:var(--text);font-weight:600}
 .seedctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -91,7 +96,7 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
 </head>
 <body>
 <main>
-<h1>SP13KTRA</h1>
+<div class=titlerow><h1>SP13KTRA</h1><canvas id=scope aria-hidden=true></canvas></div>
 <div class=sub>
     <span class=display>music bench</span>
     <p>Every circuit's soundtrack is baked at load from one small seed. Pick a seed and the whole loop is composed from it.</p>
@@ -101,7 +106,7 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
     <div class=top>
         <button id=play onclick="toggle()" aria-label="Play">▶</button>
         <div class=readout>
-            <div id=seedName class=display>seed 0</div>
+            <div class=namerow><div id=seedName class=display>seed 0</div><span id=djnext></span></div>
             <div id=pos>stopped</div>
         </div>
         <div class=seedctl>
@@ -114,6 +119,7 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
         <div class=opts>
             <label class=vol>Volume <input type=range id=vol min=0 max=1 step=.05 value=.5 oninput="gain&&(gain.gain.value=this.value)"></label>
             <label class=vol><input type=checkbox id=keep onchange="try{localStorage.musicBenchKeep=+this.checked}catch(e){}"> Keep place on switch</label>
+            <label class=vol><input type=checkbox id=dj onchange="djToggle(this.checked)"> Auto DJ</label>
         </div>
     </div>
 
@@ -147,27 +153,41 @@ const circuits = [['REDSHIFT',0,.9],['FILAMENT',.06,.9],['SODIUM',.13,.9],['AURO
 const circuitColor = i => `hsl(${circuits[i][1]*360} ${circuits[i][2]*100}% ${i==6?55:60}%)`;
 const sections = [[0,'intro'],[32,'phrase 2'],[64,'phrase 3'],[96,'breakdown'],[112,'return'],[128]];
 
-// the tool's own player: one looping source over the baked loop, started at a beat offset
-let ctx, gain, src, loop, seedNow = -1, startTime = 0;
+// the tool's own player: one looping source over the baked loop, started at a beat offset,
+// through a gain and an analyser (the spectrum beside the title)
+let ctx, gain, analyser, src, loop, seedNow = -1, startTime = 0;
 const beatSeconds = () => (zzfxR*60/musicInfo.bpm|0)/zzfxR;
+const loopSeconds = () => loop.length/zzfxR;
+function source(samples, when, offset)
+{
+    const b = ctx.createBuffer(1, samples.length, zzfxR), s = ctx.createBufferSource();
+    b.getChannelData(0).set(samples);
+    s.buffer = b; s.loop = true; s.connect(gain);
+    s.start(when, offset);
+    return s;
+}
 function play(beat)
 {
     stop();
-    ctx ||= new AudioContext;
-    gain ||= (g => (g.gain.value = $('vol').value, g.connect(ctx.destination), g))(ctx.createGain());
-    const b = ctx.createBuffer(1, loop.length, zzfxR);
-    b.getChannelData(0).set(loop);
-    src = ctx.createBufferSource();
-    src.buffer = b; src.loop = true; src.connect(gain);
-    src.start(0, beat*beatSeconds());
+    if (!ctx)
+    {
+        ctx = new AudioContext;
+        gain = ctx.createGain(); gain.gain.value = $('vol').value;
+        analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .7;
+        gain.connect(analyser); analyser.connect(ctx.destination);
+    }
+    src = source(loop, 0, beat*beatSeconds());
     startTime = ctx.currentTime - beat*beatSeconds();
+    djPlan(beat);
     $('play').textContent = '■'; $('play').ariaLabel = 'Stop';
 }
 function stop()
 {
     src && src.stop(); src = 0;
+    djCancel();
     $('play').textContent = '▶'; $('play').ariaLabel = 'Play';
     $('pos').textContent = 'stopped';
+    $('djnext').textContent = '';
     $('head').style.left = $('fill').style.width = '0';
     paintGrid(-1);
 }
@@ -225,9 +245,17 @@ function paintGrid(beat)
 function load(seed, autoplay, randomHue)
 {
     const from = src && $('keep').checked ? position() : 0; // read before the bake changes the tempo
+    loop = musicBake(seed);
+    show(seed, randomHue);
+    autoplay ? play(from) : paintGrid(-1);
+}
+const pick = seed => load(seed, 1);
+
+// show the seed in musicInfo on the page
+function show(seed, randomHue)
+{
     seedNow = seed;
     $('seed').value = seed;
-    loop = musicBake(seed);
     const ci = musicSeeds.indexOf(seed);
     // a circuit's seed takes its colour, Random takes any circuit's colour but UMBRA's grey, and any other seed keeps the colour it has
     const hue = ci>=0 && ci!=6 ? ci : randomHue ? [0,1,2,3,4,5,7][Math.random()*7|0] : -1;
@@ -238,9 +266,81 @@ function load(seed, autoplay, randomHue)
     $('facts').innerHTML = describe(musicInfo).map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
     $('desc').textContent = JSON.stringify(musicInfo, 0, 1);
     buildGrid();
-    autoplay ? play(from) : paintGrid(-1);
 }
-const pick = seed => load(seed, 1);
+
+// AUTO DJ: each seed plays two or three whole loops, then a random one takes over on the loop
+// boundary. The next loop is baked a couple of seconds early and started on the audio clock at
+// that boundary, the old source stopped at the same instant, so the change is seamless; the page
+// follows once the clock passes it. Any manual pick restarts the count (play calls djPlan).
+let djEnd = 0, djNext = 0;
+function djPlan(beat)
+{
+    // the loops still to play: the one under way counts only if it started from the top
+    djEnd = startTime + loopSeconds()*(2 + (Math.random()*2|0) + (beat>0));
+}
+function djCancel()
+{
+    djNext && djNext.src.stop();
+    djNext = 0;
+}
+function djToggle(on)
+{
+    djCancel();
+    if (!on) return;
+    if (!src) return load(Math.random()*1e4|0, 1, 1);
+    // switched on mid-song: finish this loop and play one more
+    const L = loopSeconds();
+    djEnd = startTime + (Math.floor((ctx.currentTime - startTime)/L) + 2)*L;
+}
+function djUpdate()
+{
+    if (!$('dj').checked || !src) return;
+    if (!djNext && ctx.currentTime > djEnd - 2)
+    {
+        const shown = musicInfo, seed = Math.random()*1e4|0, samples = musicBake(seed), info = musicInfo;
+        musicInfo = shown; // the page still shows the loop that is playing
+        // a bake that ran past the boundary waits for the next one (the old loop keeps looping)
+        let at = djEnd;
+        while (at < ctx.currentTime + .05) at += loopSeconds();
+        src.stop(at);
+        djNext = {seed, samples, info, at, src: source(samples, at, 0)};
+    }
+    if (djNext && ctx.currentTime >= djNext.at)
+    {
+        const n = djNext;
+        djNext = 0;
+        src = n.src; loop = n.samples; musicInfo = n.info; startTime = n.at;
+        djPlan(0);
+        show(n.seed, 1);
+    }
+}
+
+// the spectrum beside the title: log-spaced rainbow bars, falling flat when the music stops
+const scope = $('scope'), scopeCtx = scope.getContext('2d'), bars = 40, levels = new Float32Array(bars);
+let freq;
+function drawScope()
+{
+    const w = scope.clientWidth*devicePixelRatio|0, h = scope.clientHeight*devicePixelRatio|0;
+    if (scope.width != w || scope.height != h) scope.width = w, scope.height = h;
+    freq ||= analyser && new Uint8Array(analyser.frequencyBinCount);
+    src && freq && analyser.getByteFrequencyData(freq);
+    scopeCtx.clearRect(0, 0, w, h);
+    const gap = w/bars*.28, bw = w/bars - gap;
+    for (let i = 0; i < bars; ++i)
+    {
+        // bins from about 40 Hz to 7 kHz, spaced by octaves (the loops hold little above that),
+        // the highs lifted since their energy falls away
+        const lo = 1 + (2**(i/bars*7.3)|0), hi = 1 + (2**((i+1)/bars*7.3)|0);
+        let v = 0;
+        if (src && freq) { for (let k = lo; k <= hi; ++k) v = Math.max(v, freq[k]); v = Math.min(1, v/255*(.85 + i/bars*.5)); }
+        levels[i] = Math.max(v, levels[i]*.9);
+        const bh = Math.max(h*.03, levels[i]**1.5*h);
+        scopeCtx.fillStyle = `hsl(${i/bars*300} 95% ${55+levels[i]*15}%)`;
+        scopeCtx.globalAlpha = .35 + levels[i]*.65;
+        scopeCtx.fillRect(i*(bw+gap), h-bh, bw, bh);
+    }
+    scopeCtx.globalAlpha = 1;
+}
 
 $('timeline').insertAdjacentHTML('afterbegin', sections.slice(0,-1).map(([b,n],k) =>
     `<div class=sec style="left:${b/1.28}%;width:${(sections[k+1][0]-b)/1.28}%">${n}</div>`).join(''));
@@ -265,10 +365,14 @@ try { $('keep').checked = localStorage.musicBenchKeep == 1; } catch(e) {}
 load(musicSeeds[0]); // (no autoplay before a click)
 (function tick()
 {
+    djUpdate();
+    drawScope();
     if (src)
     {
-        const beat = position(), sec = sections.findLast(s => s[0] <= beat)[1];
+        const beat = position(), sec = sections.findLast(s => s[0] <= beat)[1],
+            next = Math.max(0, (djNext ? djNext.at : djEnd) - ctx.currentTime)|0;
         $('pos').innerHTML = `<b>${sec}</b> &nbsp; beat <b>${(beat|0)+1}</b>/128 &nbsp; bar <b>${(beat/4|0)+1}</b> &nbsp; phrase <b>${(beat/32|0)+1}</b>`;
+        $('djnext').innerHTML = $('dj').checked ? `next song in <b>${next/60|0}:${String(next%60).padStart(2,'0')}</b>` : '';
         $('head').style.left = $('fill').style.width = beat/1.28+'%';
         paintGrid(beat);
     }
