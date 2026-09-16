@@ -123,9 +123,9 @@ function gameStart()
     musicLoad(); // a new circuit's loop from its seed, from the top; the same circuit carries on (music.js)
     playerPlace=fieldSize;
 
-    // the player takes the grid slot of the last finishing place; the rivals fill the rest
+    // the player always takes the BACK slot; the rivals fill the rest
     // in order (their colour goes by grid order, their skill by colour: vehicle.js)
-    const slot=clamp(lastRacePlace-1,0,fieldSize-1);
+    const slot=fieldSize-1; // ALWAYS THE BACK (Frank, 2026-09-16): the grid slot was the last finishing place, so a win put you on pole and an old save could hand a returning player pole for ever (he found his js13k save doing exactly that). One grid for everyone also makes leaderboard times comparable, and it is smaller
     vehicles.push(playerVehicle=new Vehicle(slotZ(slot),slotX(slot),hsl(...racerColors[playerCraft]),playerCraft));
     if(!disableAiVehicles) for(let i=0,s=0;i<fieldSize-1;++i,++s)
     {
@@ -134,7 +134,11 @@ function gameStart()
     }
     if(titleScreenMode) // attract mode: the field spread down the road a fifth of a lap in, for the camera to look at
     {
-        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000-i*750,slotX(i));
+        // the player craft (vehicles[0]) starts at the BACK (80000-i*750 until the post-deadline fix: once the traffic rule worked in the
+        // menu, rivals held back behind a player craft started in front, and it led the field 68% of the time; reversed it sits in the
+        // pack, 3.7 of 8 and never in front, local/attract-order-probe.js START=1; a lower autodrive skill built over the limit).
+        // A camera tweak, 3f88bb4, put the minus back and dropped this comment with it; found again 2026-09-16, free either way
+        for(let i=0;i<vehicles.length;++i) vehicles[i].place(80000+i*750,slotX(i));
         // a warm-up: three seconds of the attract race run before the first frame, so a circuit picked in the menu opens on a
         // field already at speed with its trails, not parked in a line (Frank, 2026-09-13). The clock runs on from there.
         // Enhanced build only: in the 13k build it cost 28 bytes
@@ -466,7 +470,7 @@ const saveName = 'SP13KTRA';
 // kept; the 13k build folds to the plain read and write
 const saveData=((enhancedMode ? (()=>{try{return localStorage[saveName]}catch(e){}})() : localStorage[saveName]) || '').split(',');
 currentCircuit = mod(saveData[0]*1 || 0, circuitCount); // never index past the circuit table
-lastRacePlace = saveData[1]*1 || fieldSize;
+// (the saved finishing place is still WRITTEN, so the positional save keeps its shape for older saves, but nothing reads it: the grid is fixed)
 playerCraft = mod(saveData[2]*1 || 0, 6);
 let bestPlaces = (saveData[3] || '').padEnd(circuitCount, 0); // a string of circuitCount digits
 let musicMuted = 0, bestTimes = saveData.slice(4).map(Number); // the M key's music-off flag (not saved since 2026-09-13); bestTimes[c] the best finish on circuit c in seconds, 0 for none

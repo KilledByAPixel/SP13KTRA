@@ -223,7 +223,7 @@ class Racer extends Vehicle
 // aiLine, how much of the racing line a rival follows (.35 until then: it cut every corner tighter than the road allows). A solo
 // time trial at skill 1 (local/ai-corner-trial.js) chose .08, 34,000 and .7 over .15, 30,000 and .35: REDSHIFT 48.0 to 47.0 s,
 // ULTRAVIOLET 56.1 to 51.4, UMBRA 65.7 to 62.4 (3 wall hits from 0), SP13KTRA 65.4 to 63.0; with no corner brake it died on UMBRA
-const aiClip=.96, aiCornerSlow=.08, aiCornerBrake=34000, aiBoostGap=5000, aiLine=.7;
+const aiClip=.96, aiCornerSlow=.08, aiCornerBrake=34000, aiBoostGap=5000, aiLine=.7, aiPaceFloor=.7;
 function driveAI(v)
 {
     const info=new TrackSegmentInfo(v.s), seg=info.segmentIndex;
@@ -261,7 +261,10 @@ function driveAI(v)
         if(ahead>0 && ahead<3400 && abs(side)<650 && time>5) // not in the first two seconds off the grid: GO lands at time 3 (raceTime>2 until the post-deadline fix, but raceTime only runs in a race, so the title and menu's attract field never avoided traffic and rammed itself)
         {
             x=clamp(v.localX+(side>0?-900:900),-info.w+700,info.w-700);
-            if(ahead<1000 && abs(side)<300 && v.speed>other.speed) targetSpeed=min(targetSpeed,other.speed*.98); // only a craft squarely ahead holds a rival back; one beside it is passed (2026-09-13 try: rivals trailed a coasting player)
+            // only a craft squarely ahead holds a rival back; one beside it is passed (2026-09-13 try: rivals trailed a coasting player). Never
+            // below aiPaceFloor of its own target though (Frank, 2026-09-16): a player crawling in front had the whole field queue up behind him
+            // at 98% of his pace and nobody ever came past. In a pack everyone is near their target, so this floor never binds there
+            if(ahead<1000 && abs(side)<300 && v.speed>other.speed) targetSpeed=min(targetSpeed,max(other.speed*.98,targetSpeed*aiPaceFloor));
         }
     }
 
@@ -375,8 +378,7 @@ function stepVehicle(v,c,dt)
         if(racing(v))
         {
             sound_lose.play(.7);
-            lastRacePlace=fieldSize;
-            gameOverTime=time;
+            gameOverTime=time; // (the grid no longer moves with the last place, so a death sets nothing: the results card reads OUT from deadUntil)
             wavedashMode && wdExplode(); // the secret Supernova achievement on Wavedash (wavedash.js)
             newgroundsMode && ngExplode(); // and the Newgrounds medal (newgrounds.js)
         }

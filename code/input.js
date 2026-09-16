@@ -67,8 +67,11 @@ function inputInit()
         enhancedMode && (isUsingGamepad = 0); // any key press hands control back to the keyboard
         // (mouse mode ends on the gas key, where the race reads it: vehicle.js. Any key ended it here for a day, Space too, so a mouse player braking on Space lost the mouse steer, Frank 2026-09-14)
         // consume printable keys: Firefox otherwise opens find-as-you-type on WASD, and the
-        // page would scroll on space. Ctrl combinations and F-keys stay with the browser
-        e.key.length < 2 && !e.ctrlKey && e.preventDefault();
+        // page would scroll on space. Ctrl combinations and F-keys stay with the browser.
+        // The ARROWS too in the enhanced build (Frank, 2026-09-16: they scrolled the Newgrounds page under the game): every
+        // enhanced build runs framed in somebody's page (Newgrounds, Wavedash, the GitHub page), and wdInit used to guard
+        // this for Wavedash alone. It folds out of the 13k build, whose own page has nothing to scroll
+        (e.key.length < 2 || enhancedMode && e.key.startsWith('Arrow')) && !e.ctrlKey && e.preventDefault();
         if (!e.repeat) // auto-repeat must not re-fire "pressed"
         {
             inputData[e.code] = 3; // held + pressed

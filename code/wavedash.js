@@ -41,8 +41,7 @@ function wdInit()
     wd().init(); // until this runs the platform shows its loading screen over the game
     for (let c = 0; c < circuitCount; ++c)
         wdBoard(c); // every circuit's board exists from the first launch, not from the first finish there
-    // input.js consumes only printable keys, so the arrow keys would scroll the Wavedash page around the game
-    addEventListener('keydown', e => e.key.startsWith('Arrow') && e.preventDefault());
+    // (the arrow-key guard that kept the platform page from scrolling lives in input.js since 2026-09-16: every embed needs it, not this one alone)
     wdAchieve(); // from this device's save
     wdSync();
 }
