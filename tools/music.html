@@ -38,6 +38,8 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
 .seedctl input{font:600 16px system-ui,sans-serif;width:5.5em;text-align:center;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 4px;font-variant-numeric:tabular-nums}
 .vol{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:13px}
 .vol input{accent-color:hsl(var(--hue) 90% 60%);width:110px}
+.vol input[type=checkbox]{width:auto;margin:0}
+.opts{display:flex;flex-direction:column;gap:6px}
 
 #timeline{position:relative;height:46px;margin:22px 0 4px;border-radius:8px;overflow:hidden;cursor:pointer;background:#16131f}
 #timeline .sec{position:absolute;top:0;bottom:0;border-left:1px solid rgba(255,255,255,.12);padding:6px 9px;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden}
@@ -109,7 +111,10 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
             <button onclick="pick(Math.random()*1e4|0)">Random</button>
             <button onclick="pick(0)">Original</button>
         </div>
-        <label class=vol>Volume <input type=range id=vol min=0 max=1 step=.05 value=.5 oninput="gain&&(gain.gain.value=this.value)"></label>
+        <div class=opts>
+            <label class=vol>Volume <input type=range id=vol min=0 max=1 step=.05 value=.5 oninput="gain&&(gain.gain.value=this.value)"></label>
+            <label class=vol><input type=checkbox id=keep onchange="try{localStorage.musicBenchKeep=+this.checked}catch(e){}"> Keep place on switch</label>
+        </div>
     </div>
 
     <div id=timeline title="Click to jump"><div id=fill></div><div id=head></div></div>
@@ -219,6 +224,7 @@ function paintGrid(beat)
 // bake a seed and show it (start it from the top unless asked not to)
 function load(seed, autoplay)
 {
+    const from = src && $('keep').checked ? position() : 0; // read before the bake changes the tempo
     seedNow = seed;
     $('seed').value = seed;
     loop = musicBake(seed);
@@ -230,7 +236,7 @@ function load(seed, autoplay)
     $('facts').innerHTML = describe(musicInfo).map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
     $('desc').textContent = JSON.stringify(musicInfo, 0, 1);
     buildGrid();
-    autoplay ? play(0) : paintGrid(-1);
+    autoplay ? play(from) : paintGrid(-1);
 }
 const pick = seed => load(seed, 1);
 
@@ -253,6 +259,7 @@ onkeydown = e =>
     if (e.code == 'ArrowRight') pick(seedNow+1);
 };
 
+try { $('keep').checked = localStorage.musicBenchKeep == 1; } catch(e) {}
 load(musicSeeds[0]); // (no autoplay before a click)
 (function tick()
 {
