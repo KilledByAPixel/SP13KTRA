@@ -10,7 +10,7 @@
 // the canvas, driven by pointer events with pointer capture, so every finger is its own
 // control and both thumbs work at once. It writes the arrays a real gamepad fills (input.js
 // gamepadData and gamepadStickData, pad 0) and sets isUsingGamepad, so vehicle.js, the pause
-// and the race read it unchanged: the steer line, button 0 gas, 2 brake, 5 turbo, 9 pause
+// and the race read it unchanged: the steer stick, button 0 gas, 2 brake, 5 turbo, 9 pause
 // (and resume), 8 title.
 //
 // It shows only in a race (the countdown too) on a touch device, or with the touch() dev
@@ -22,11 +22,12 @@
 //   GAS big in the bottom right corner, TURBO above it, pause top centre
 //   BRAKE left of GAS on a wide window, tucked beside TURBO on a tall one (on a thin
 //     portrait window the wide layout's BRAKE sits over the steer)
-//   steering is a horizontal line bottom left, not a stick (only left and right count): a
+//   steering is an analog stick bottom left, mirroring GAS, after Driven Wild's: a fixed
+//     circle with a small knob that slides only sideways (up and down do not count). A
 //     press anywhere on the left half that is not a button takes it, and the thumb's
-//     sideways offset from the line's centre steers, full lock at the line's end. The line
-//     stays put wherever the thumb lands. With touchSteerFloat it floats instead: a press
-//     re-centres it under the thumb, and released it rests bottom left
+//     sideways offset from the circle's centre steers, full lock at two thirds of its
+//     radius, where the knob stops. It fills white while held. With touchSteerFloat it
+//     floats instead: a press re-centres it under the thumb, and released it rests
 //
 // build.js's MANGLE_PROPS applies to the enhanced build: never call a built-in method whose
 // name is on its list here (a Map's get ships renamed and throws).
@@ -34,7 +35,7 @@
 
 const touchDevice = window.ontouchstart !== undefined;
 
-// 0: the steer line is fixed bottom left. 1: it re-centres under each new thumb
+// 0: the stick is fixed bottom left. 1: it re-centres under each new thumb
 const touchSteerFloat = 0;
 
 // the touch() dev command: the pad without a touch screen, driven by the mouse
@@ -164,10 +165,9 @@ function touchLayout(W, H)
         {button:9, x:W/2-S*1.3, y:H*.72, r:S*.55, label:'RESUME'},
         {button:8, x:W/2+S*1.3, y:H*.72, r:S*.55, label:'TITLE'},
     ] : [
-        // the steer line; r is half its length. Fixed, it is longer: a thumb never lands dead
-        // centre on a control that does not come to it (less so on a tall window, where a
-        // full-length line crowds BRAKE), level with GAS's centre so both thumbs sit even
-        touchSteerFloat ? {stick:1, x:S*1.4, y:H-S*1.4, r:S*.8} : {stick:1, x:S*(tall ? 1.25 : 1.5), y:H-S*1.1, r:S*(tall ? .85 : 1)},
+        // the stick, level with GAS's centre so both thumbs sit even; bigger on a wide
+        // window, which has the room
+        {stick:1, x:S*(tall ? 1 : 1.2), y:H-S*1.1, r:S*(tall ? .65 : .85)},
         {button:0, x:W-S*1.1, y:H-S*1.1, r:S*.7, label:'GAS'},
         {button:2, x:W-S*(tall ? 2.35 : 2.7), y:H-S*(tall ? 2.35 : .8), r:S*.5, label:'BRAKE'},
         // lower on a wide window: at 2.7 it overlaps the minimap under the lap
@@ -206,8 +206,8 @@ function touchDraw()
     for (const c of touchControls)
         if (c.stick)
         {
-            c.line = shape('line', {stroke:'#fff', 'stroke-width':6, 'stroke-linecap':'round'});
-            c.thumb = shape('circle', {r:c.r*.3, fill:'#fff'});
+            c.el = shape('circle', {r:c.r, stroke:'#fff', 'stroke-width':3});
+            c.thumb = shape('circle', {r:c.r/3, stroke:'#fff', 'stroke-width':3});
         }
         else
         {
@@ -228,7 +228,7 @@ function touchRelease()
 }
 
 // the control a press at p takes: the nearest button in reach (1.4 radii), else the steer
-// line anywhere on the left half
+// stick anywhere on the left half
 function touchHit(p)
 {
     let hit, best = 1.4;
@@ -241,9 +241,9 @@ function touchHit(p)
     return hit || p.x < innerWidth/2 && touchControls.find(c => c.stick);
 }
 
-// the thumb's sideways offset from the line's centre (floating: from where it landed), full
-// lock at the line's end
-const touchApplyStick = (c, p)=> touchStick = vec3(clamp((p.x - (c.ax || c.x))/c.r, -1, 1), 0);
+// the thumb's sideways offset from the stick's centre (floating: from where it landed), full
+// lock at two thirds of the radius (Driven Wild's response: a short throw)
+const touchApplyStick = (c, p)=> touchStick = vec3(clamp((p.x - (c.ax || c.x))*1.5/c.r, -1, 1), 0);
 
 function touchDown(e)
 {
@@ -260,7 +260,7 @@ function touchDown(e)
     if (c.stick)
     {
         if (touchSteerFloat)
-            c.ax = p.x, c.ay = p.y; // the line re-centres under the thumb
+            c.ax = p.x, c.ay = p.y; // the stick re-centres under the thumb
         touchApplyStick(c, p);
     }
     else
@@ -339,9 +339,10 @@ function touchUpdate()
         if (c.stick)
         {
             const x = c.ax || c.x, y = c.ay || c.y;
-            c.line.setAttribute('x1', x - c.r), c.line.setAttribute('x2', x + c.r);
-            c.line.setAttribute('y1', y), c.line.setAttribute('y2', y);
-            c.thumb.setAttribute('cx', x + touchStick.x*c.r), c.thumb.setAttribute('cy', y);
+            // held, the circle and its knob fill white like a pressed button
+            const fill = Object.values(touchRoles).includes(c) ? '#fff8' : '#0006';
+            c.el.setAttribute('cx', x), c.el.setAttribute('cy', y), c.el.setAttribute('fill', fill);
+            c.thumb.setAttribute('cx', x + touchStick.x*c.r*2/3), c.thumb.setAttribute('cy', y), c.thumb.setAttribute('fill', fill);
         }
         else
             c.el.setAttribute('fill', touchButtons[c.button] ? '#fff8' : '#0006');
