@@ -15,31 +15,33 @@
 // and nozzle glow from v.trail / v.nozzles; debug.js spawns extra Racers. The
 // tests call stepVehicle, driveAI, containCraft and checkCraftContacts directly.
 //
-// All velocities are WORLD units / second. Route s is derived from position and
+// All velocities are world units / second. Route s is derived from position and
 // exists only for navigation, containment and validated race progress.
 ///////////////////////////////////////////////////////////////////////////////
 
 const raceLine=3000, maxCraftSpeed=32000; // route s of the start line; the normal speed cap
 
-// the player's race effects, and only in a race: the attract lap behind the title and
-// menu is silent apart from the menu's own cues
-const racing=v=>v===playerVehicle && !titleScreenMode && !gameOverTime; // and not once the race is over: the AI drives on in silence, as behind the title and menu (Frank, 2026-09-15: a pad's boost played over the results card);
+// true for the player's craft in a live race: gates its sound effects and its death. The
+// attract lap behind the title and menu is silent, and so is the AI driving on once the
+// race is over (a pad's boost would play over the results card)
+const racing=v=>v===playerVehicle && !titleScreenMode && !gameOverTime;
 
+// contactTimes: per-pair contact cooldown, keyed i*count+j
 // timers (seconds): the next low-energy beep, lap beeps left and the next one, the next
-// charge blip; contactTimes: per-pair contact cooldown, keyed i*count+j
-let contactTimes=[], engineSound, keySteer=0, lowBeepTime=0, lapBeeps=0, lapBeepTime=0, chargeTime=0, bumpDistance=0; // bumpDistance: units of travel left before the next rough-shoulder bump
+// charge blip; bumpDistance: units of travel left before the next rough-shoulder bump
+let contactTimes=[], engineSound, keySteer=0, lowBeepTime=0, lapBeeps=0, lapBeepTime=0, chargeTime=0, bumpDistance=0;
 
-// feel tunables, shared by the rivals: keySteerEase is the per-frame lerp of the keyboard
-// steer toward the key (lower = a softer ramp), steerRate the heading rate in rad/s,
-// gripNormal the per-second bleed of sideways velocity (14 was on rails,
-// 8 lets every corner drift a touch, 4 is a boat)
+// feel tunables. keySteerEase: the per-frame lerp of the keyboard steer toward the key
+// (lower = a softer ramp; the player's only). steerRate: the heading rate in rad/s.
+// gripNormal: the per-second bleed of sideways velocity (14 is on rails, 8 lets every
+// corner drift a touch, 4 is a boat)
 const keySteerEase=.15, steerRate=1, gripNormal=8;
 
-// the steer rate off the gas or on the brake (every craft) and the player's on the turbo, as fractions
-// of steerRate: some corners are tighter than the rate, so letting go turns faster, and the turbo
-// gives less to adjust with. coastSteer was 2 until 2026-09-13; out for an hour that day (it oversteered
-// on Frank) and back at 1.5 once UMBRA's corners would not go round without it
-const coastSteer=1.5, turboSteer=.75, steerEase=.15; // steerEase: seconds for the multiplier to settle after the gas or turbo changes (a snap was too sudden)
+// steer rate multipliers. coastSteer: off the gas or on the brake, every craft (some
+// corners are tighter than the plain rate, so letting go turns tighter; 2 oversteers).
+// turboSteer: the player's on the turbo (less to adjust with). steerEase: seconds for the
+// player's multiplier (steerMul) to settle after the gas or turbo changes, never a snap
+const coastSteer=1.5, turboSteer=.75, steerEase=.15;
 let steerMul=1;
 
 // how much of the speed the grip step keeps as it turns the velocity toward the nose,
@@ -47,13 +49,12 @@ let steerMul=1;
 // the speed transfers whole into the new direction, so a corner costs only the drag
 const gripKeep=1;
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // hull specs and the field
 ///////////////////////////////////////////////////////////////////////////////
 
 // one hull per colour index, built once by draw.js into craftSpecs (with the loft mesh).
-// Wide, FLAT, long: the fleet's span/length is about .52 against the reference sheet's
+// Wide, flat, long: the fleet's span/length is about .52 against the reference sheet's
 // .458 (4.08m x 1.87m), a deliberate exaggeration for a squatter race-distance read
 function makeCraftSpec(i)
 {
@@ -61,20 +62,20 @@ function makeCraftSpec(i)
     const bs = vec3(r.float(205,250), r.float(78,100), r.float(345,405)); // half extents
     const sweep = r.float(.82,.92);  // how far back along the hull the wingtips sit
     const taper = r.float(.5,.72);   // trailing edge width vs wingspan
-    const wingX = r.float(.74,1);    // wingspan
-    // the loft: stations nose to tail, [z, halfWidth, topY, bottomY], FEISAR proportions
-    // measured off the reference sheet. In plan it is one long triangle from the nose
-    // out to the wingtips at 82-92% back (.4 of the span at 35%, .74 at 62%, on the
-    // near straight leading edge), then the trailing edge cuts back in; in profile the
-    // keel is near flat and the deck ridge climbs the whole way, so no two facets share
-    // a pitch. The deck datum is y=40
+    const wingX = r.float(.74,1);    // wingspan, as a fraction of the half extent
+
+    // the loft: stations nose to tail, [z, halfWidth, topY, bottomY]. In plan it is one
+    // long triangle from the nose out to the wingtips at 82-92% back (.4 of the span at
+    // 35%, .74 at 62%, on the near straight leading edge), then the trailing edge cuts
+    // back in; in profile the keel is near flat and the deck ridge climbs the whole way,
+    // so no two facets share a pitch. The deck datum is y=40
     const L = bs.z, W = bs.x*wingX, H = bs.y;
     return {
         bs,
-        w: W,                         // half wingspan
-        t: W*taper,                   // half trailing edge
-        engines: 1+i%3,               // engine glow count
-        tail: vec3(0, 40+H*.17, -L-30), // nozzle centroid (craft space): sparks AND the trail leave here
+        w: W,                           // half wingspan
+        t: W*taper,                     // half trailing edge
+        engines: 1+i%3,                 // engine glow count
+        tail: vec3(0, 40+H*.17, -L-30), // nozzle centroid (craft space): sparks and the trail leave here
         mesh: buildLoft(
         [
             // nose: a true point (top==bottom), so buildLoft's diagonal quad normal stays
@@ -90,16 +91,9 @@ function makeCraftSpec(i)
 
 // the eight craft colours as hsl, in rainbow order: red, orange, yellow, green, blue,
 // violet, black, white (hsl(0,0,1) is exactly WHITE: unsplit light). The player takes
-// one of the first six on the title; the rivals take the rest (Racer), so black and
-// white are always rivals. (A field of 20 with twelve muted intermediate colours was
-// tried and dropped: from the front you never see them, and eight tells the story)
+// one of the first six in the menu; the rivals take the rest (Racer), so black and
+// white are always rivals
 const racerColors = [[0,.8,.5],[.08,1,.5],[.14,1,.5],[.33,.9,.4],[.6,1,.5],[.8,.8,.55],[0,0,.05],[0,0,1]];
-
-// rival skill and home circuit go by COLOUR (Racer): the six primaries .90-.96, black .98
-// and white 1.04, each with one home circuit for a 4% bump (white's is the finale).
-// The ladder is deliberately WIDE: a narrow .92-1.02 ladder put every rival in the
-// rubber band's linear region, one blob 3-12k behind the player; below its saturation
-// edge each .03 of skill is about 1.5 s at the finish on a pad-rich circuit
 
 // pad seeking, shared by the rivals and the autodrive: the lane centre of the nearest
 // pad within 80 segments, if it is at most one lane-change away (laneWidth*1.6: the
@@ -131,14 +125,21 @@ class Vehicle
         this.glowColor=index==6?WHITE:color.lerp(WHITE,.15);
         this.trail=[];
         this.energy=100;
-        this.speed=this.playerTurn=this.throttle=this.burn=0; // throttle: eased gas, burn: eased boost, 0..1 for the engine glow and ribbon
+        // playerTurn: the eased steer, for the visual lean; throttle: the eased gas (-.5 on
+        // the brake) and burn: the eased boost, 0..1, for the engine glow and the ribbon
+        this.speed=this.playerTurn=this.throttle=this.burn=0;
+        // boostTime: when the boost ends; boostPower: the end of a turbo press's committed
+        // window, 0 for a pad's boost; deadUntil: the respawn time, 0 while alive
         this.boostTime=this.deadUntil=this.boostPower=0;
-        this.padTime=this.wallTime=this.hitTime=-1; // last pad / hard-wall hit, for the cooldowns; hitTime: the damage burst (track.js)
-        this.gates=this.lap=this.raceDistance=0; this.nextGate=raceLine; // ordered gates: the first is the start line
+        // padTime: the last pad; wallTime: the end of the hard-wall cooldown; hitTime: the
+        // end of the damage burst (track.js)
+        this.padTime=this.wallTime=this.hitTime=-1;
+        this.gates=this.lap=this.raceDistance=0; this.nextGate=raceLine; // the first gate is the start line
         this.place(s,x);
     }
 
-    // seat the craft at rest on the route frame at (s, lateral x): the grid, respawns and dev relocation
+    // seat the craft at rest on the route frame at (s, lateral x): the grid, respawns and
+    // dev relocation
     place(s,x=0)
     {
         const info=new TrackSegmentInfo(s);
@@ -174,16 +175,16 @@ class Vehicle
     draw()
     {
         this.nozzles=[];
-        if(this.deadUntil) return; // a rival clears this on respawn; the player never does, so the wreck stays gone
+        if(this.deadUntil) return; // exploded: nothing to draw until the respawn clears it
         const m=this.craftMatrix(), S=this.craft, H=S.w, bs=S.bs;
 
-        // the hull, lit and glossy (the GL flags are as drawTrack left them: depth on, lit. The
-        // craft shadow went on 2026-09-13: barely visible, and it cut through the ground)
+        // the hull, lit and glossy (the GL flags are as drawTrack left them: depth on, lit).
+        // There is no craft shadow
         glSpecularity=.75;
         S.mesh.render(m,this.color);
 
-        // the canopy: a half-emissive diamond over the 62% station, in a lighter tint (.6 toward white since
-        // 2026-09-13, .35 before: from behind the dark craft merged into the dark road)
+        // the canopy: a half-emissive diamond over the 62% station, .6 toward white (any
+        // darker and a dark craft merges into the dark road from behind)
         glEmissive=.5;
         canopyMesh.render(
             m.multiply(buildMatrix(vec3(0,40+bs.y*.5,-bs.z*.22),vec3(-.1,0),vec3(H*.28,bs.y*.55,bs.z*.26))),
@@ -198,9 +199,13 @@ class Vehicle
     }
 }
 
+// a rival. Skill goes by colour; each also has a home circuit, its racerIndex, for a 4%
+// bump (driveAI; white's is the finale). The ladder is deliberately wide: a narrow
+// .92-1.02 one puts every rival in the catch-up's linear region, one blob behind the player
 class Racer extends Vehicle
 {
-    constructor(s,x,k) // k: grid order 0..fieldSize-2; the colour is the k-th one the player did not take
+    // k: grid order 0..fieldSize-2; the colour is the k-th one the player did not take
+    constructor(s,x,k)
     {
         const c=k+(k>=playerCraft);
         super(s,x,hsl(...racerColors[c]),c);
@@ -213,17 +218,22 @@ class Racer extends Vehicle
 // AI: produces the same {steer,gas,brake,boost} controls the player does
 ///////////////////////////////////////////////////////////////////////////////
 
-// Also drives the player on the title screen and under autodrive (testDrive), where
-// skill and lineOffset are missing: hence the || fallbacks.
-// rival tunables (2026-09-13 tries, Frank: rivals too easy): aiClip, the pace clip before the catch-up as a fraction of the
-// normal top speed times the circuit's rivalSkill, so the straights get faster up the ladder too (1.046 on REDSHIFT to 1.12 on
-// the finale; a flat 1.05 for an hour, and 1 until then, when the ladder only reached the corners); aiCornerSlow, the pace cut per
-// unit of the sharpest turn ahead (.2 until then); aiCornerBrake, speed times turn that brakes (24,000 until then; a player
-// only lifts); aiBoostGap, how far behind the player a rival holds its free turbo (8,000 until then; 4,000 crowded him to death);
-// aiLine, how much of the racing line a rival follows (.35 until then: it cut every corner tighter than the road allows). A solo
-// time trial at skill 1 (local/ai-corner-trial.js) chose .08, 34,000 and .7 over .15, 30,000 and .35: REDSHIFT 48.0 to 47.0 s,
-// ULTRAVIOLET 56.1 to 51.4, UMBRA 65.7 to 62.4 (3 wall hits from 0), SP13KTRA 65.4 to 63.0; with no corner brake it died on UMBRA
+// rival tunables:
+//   aiClip: the pace clip before the catch-up, as a fraction of the normal top speed times
+//     the circuit's rivalSkill, so the straights get faster up the ladder as well as the corners
+//   aiCornerSlow: the pace cut per unit of the sharpest turn ahead
+//   aiCornerBrake: speed times turn above which a rival brakes (a player only lifts);
+//     with no corner brake at all a rival dies on UMBRA
+//   aiBoostGap: how far behind the player a rival starts holding its free turbo (at 4,000
+//     the boosting pack crowds the player to death)
+//   aiLine: how much of the racing line a rival follows (at .35 it cuts every corner tighter
+//     than the road allows)
+//   aiPaceFloor: the traffic cap never paces a rival below this fraction of its own target
 const aiClip=.96, aiCornerSlow=.08, aiCornerBrake=34000, aiBoostGap=5000, aiLine=.7, aiPaceFloor=.7;
+
+// Also drives the player's craft behind the title and menu, once the race is over and
+// under autodrive (testDrive), where skill and lineOffset are missing: hence the ||
+// fallbacks. The player's own gap is 0, so its catch-up is 1 and it never boosts
 function driveAI(v)
 {
     const info=new TrackSegmentInfo(v.s), seg=info.segmentIndex;
@@ -233,24 +243,20 @@ function driveAI(v)
     let x=padSeekX(seg,v.localX) ?? (trackRacingLine[seg]*aiLine+(v.lineOffset||0));
     let targetSpeed=maxCraftSpeed*(v.skill||.96)*levelInfo.rivalSkill;
 
-    // the sharpest curvature over the next 300 segments, each weighted down by its distance (1-k/400: a turn 280 on counts
-    // .3), sets the corner pace, the lift and the corner brake. Until the post-deadline tuning it was the plain sharpest over
-    // 100 segments, about 13,000 units, too late to slow from 32,000 for a hairpin: rivals and the autodrive hit the outside
-    // wall of UMBRA's hairpins nearly every lap and of SP13KTRA's (100 samples at turn 2.5) every lap, Frank. A plain longer
-    // scan saw them but slowed every corner on every circuit; the weight brakes early only for the sharpest. A solo trial
-    // (local/ai-corner-trial.js ROUND=7) went from 12 wall hits to 0 over all eight circuits at the same total time, 421 to 423 s,
-    // with the lift moved from 21,000 to 24,000 (local/sp13ktra-hairpin-trace.js: the steer was at full lock, the speed too high)
+    // the sharpest curvature over the next 300 segments, each weighted down by its distance
+    // (1-k/400: a turn 280 on counts .3), sets the corner pace, the lift and the corner
+    // brake. A short scan sees a hairpin too late to slow from top speed; a plain long one
+    // slows every corner on every circuit; the weight brakes early only for the sharpest
     let corner=0;
     for(let k=0;k<300;k+=20) corner=max(corner,abs(track[wrapSegment(seg+k)].turn)*(1-k/400));
-    targetSpeed*=clamp(1-corner*aiCornerSlow,.35,1); // at .08 a 10,000 radius (turn 2.5) takes a fifth off the pace
-    if(v.racerIndex==currentCircuit) targetSpeed*=1.04;
+    targetSpeed*=clamp(1-corner*aiCornerSlow,.35,1); // at .08 a 10,000 radius (turn 2.5) costs a fifth
+    if(v.racerIndex==currentCircuit) targetSpeed*=1.04; // the home circuit
 
-    // catch-up changes the target pace only, never position: .98-1.1 over a 40k gap (a 20k gap until 2026-09-13: each
-    // rival settles where the catch-up cancels its skill, so the gentler slope sets the field twice as far apart, Frank)
-    // (the player's own gap is 0: a factor of 1)
+    // catch-up changes the target pace only, never position: .98-1.1, full at a 40k gap.
+    // Each rival settles where the catch-up cancels its skill, so the slope spaces the field.
+    // The pace is clipped before the catch-up multiplies it, so a rival well behind runs
+    // past the normal top speed and can close on a player on the turbo
     const gap=playerVehicle.raceDistance-v.raceDistance;
-    // the pace is clipped to the normal top speed BEFORE the catch-up, so a rival well behind can run past it
-    // (clipped after, in stepVehicle, until 2026-09-13: the rubber band could never close on a player on the turbo)
     targetSpeed=min(targetSpeed,maxCraftSpeed*levelInfo.rivalSkill*aiClip)*clamp(1+gap/400000,.98,1.1);
 
     // traffic: swerve a lane away from a craft close ahead and do not ram it
@@ -258,12 +264,14 @@ function driveAI(v)
     {
         if(other===v) continue;
         const d=other.pos.subtract(v.pos), ahead=d.dot(v.forward), side=d.dot(info.right);
-        if(ahead>0 && ahead<3400 && abs(side)<650 && time>5) // not in the first two seconds off the grid: GO lands at time 3 (raceTime>2 until the post-deadline fix, but raceTime only runs in a race, so the title and menu's attract field never avoided traffic and rammed itself)
+        // not in the first two seconds off the grid: GO lands at time 3 (time, not raceTime,
+        // which only runs in a race: the attract field must avoid traffic too)
+        if(ahead>0 && ahead<3400 && abs(side)<650 && time>5)
         {
             x=clamp(v.localX+(side>0?-900:900),-info.w+700,info.w-700);
-            // only a craft squarely ahead holds a rival back; one beside it is passed (2026-09-13 try: rivals trailed a coasting player). Never
-            // below aiPaceFloor of its own target though (Frank, 2026-09-16): a player crawling in front had the whole field queue up behind him
-            // at 98% of his pace and nobody ever came past. In a pack everyone is near their target, so this floor never binds there
+            // only a craft squarely ahead holds a rival back; one beside it is passed. Never
+            // below aiPaceFloor of its own target, or the whole field queues behind a crawling
+            // player; in a pack everyone is near their target, so the floor never binds there
             if(ahead<1000 && abs(side)<300 && v.speed>other.speed) targetSpeed=min(targetSpeed,max(other.speed*.98,targetSpeed*aiPaceFloor));
         }
     }
@@ -271,20 +279,20 @@ function driveAI(v)
     const target=sampleRoute(v.s+look,x).subtract(v.pos);
     const error=clampAngle(Math.atan2(target.x,target.z)-v.heading);
     const steer=clamp(error*3,-1,1);
-    // brake when well over pace, or when too fast for the corner ahead: the turning radius is the speed,
-    // a turn of 1 is a 25,000 radius, so speed*turn over 25,000 runs wide (a fixed 16,500 into corners
-    // under 15,000 until 2026-09-13; the brake only slows a rival: the slide it started went with the player's)
-    // (the over-pace brake waits while a boost runs: since the brake cuts boost thrust (the post-deadline fix), it cancelled a
-    // rival's own pad and catch-up boosts, topping them near 32,500 and 35,500 instead of 39,000 and 40,000, with brake and thrust
-    // flipping every step; local/rival-boost-probe.js. Removing the over-pace brake outright crashed rivals: 12 deaths, rival-brake-trial)
+
+    // brake when well over pace, or when too fast for the corner ahead: the turning radius
+    // is the speed and a turn of 1 is a 25,000 radius, so speed*turn over 25,000 runs wide.
+    // The over-pace brake waits while a boost runs: the brake cuts boost thrust, so it would
+    // cancel the rival's own pad and catch-up boosts. Without it rivals crash
     const brake=v.boostTime<time&&v.speed>targetSpeed+1350 || v.speed*corner>aiCornerBrake;
-    // full gas with the target as a CAP: gas on-off around the target made the engines
-    // flutter; the cap holds the pace and the glow steady. A rival aiBoostGap or more behind holds
-    // the same boost the player has, at no energy cost (the player's gap is 0)
-    // lift off the gas into a corner the steer rate cannot hold at this speed (at 1 rad/s the turning
-    // radius is the speed): off the gas a rival turns at coastSteer, the player's own trick (without the slide, rivals ran wide
-    // into ULTRAVIOLET's 22,000 corners and exploded, 2026-09-13; the lift's margin lets the brake wait)
-    return {steer,gas:v.speed*corner<24000,cap:targetSpeed,brake,boost:gap>aiBoostGap} // the lift at 24,000 (21,000 until the post-deadline tuning, with the longer corner scan)
+
+    // gas: lifted where speed*turn passes 24,000, a corner the steer rate cannot hold; off
+    //   the gas a rival turns at coastSteer, the player's own trick, and the lift's margin
+    //   lets the brake wait
+    // cap: full gas with the target as a cap (stepVehicle). Gas on-off around the target
+    //   makes the engines flutter; the cap holds the pace and the glow steady
+    // boost: a rival aiBoostGap or more behind holds the player's turbo, at no energy cost
+    return {steer,gas:v.speed*corner<24000,cap:targetSpeed,brake,boost:gap>aiBoostGap}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -298,7 +306,7 @@ function containCraft(v)
 {
     const r=projectRoute(v.pos,v.s), info=r.info;
     // the footprint's lateral half extent as the hull yaws: 120 square-on, 320 sideways
-    // (240/400 kept the hull a ship's width off the wall, which looked unfair)
+    // (240/400 keeps the hull a ship's width off the wall, which looks unfair)
     const slip=clampAngle(v.heading-info.heading);
     const extent=abs(Math.cos(slip))*120+abs(Math.sin(slip))*320;
     const edge=info.w-extent, x=clamp(r.x,-edge,edge);
@@ -307,7 +315,8 @@ function containCraft(v)
     {
         const side=sign(r.x), outward=v.velocity.dot(info.right)*side;
         v.pos.addSelf(info.right.scale(x-r.x)); // back inside the wall
-        if(outward>0) v.velocity=v.velocity.subtract(info.right.scale(side*outward)); // no motion into the wall
+        // no motion into the wall
+        if(outward>0) v.velocity=v.velocity.subtract(info.right.scale(side*outward));
         if(outward>750 && time>v.wallTime)
         {
             // a hard hit: speed and energy penalty, .3 s cooldown
@@ -337,24 +346,28 @@ function containCraft(v)
 // the simulation step, shared by the player and the rivals
 ///////////////////////////////////////////////////////////////////////////////
 
-// c: {steer -1..1, gas, brake, boost, cap?}; dt: the fixed step (1/60). Handles death
-// and respawn, the power slide, steering, thrust and braking, substepped movement with
-// containment, pads, the recharge strip, the rough shoulder, ordered gates and race
-// distance.
+// c: {steer -1..1, gas (0..1 from the enhanced build's gamepad trigger, else 0 or 1), brake,
+// boost, cap?}; dt: the fixed step (1/60). Handles death and respawn, steering, grip,
+// thrust and braking, substepped movement with containment, pads, the recharge strip,
+// the rough shoulder, ordered gates and race distance.
 function stepVehicle(v,c,dt)
 {
     v.previousPosition=v.pos.scale(1);
-    v.throttle=lerp(.15,v.throttle,c.brake?-.5:c.gas?enhancedMode?+c.gas:1:0); // enhanced: the gamepad trigger's partial gas lights the engine partway // the engine light follows the gas: off it, it shrinks as at rest; on the brake it eases to -.5, so the ribbon narrows to a quarter and the nozzles to .15 of their size, the brake's feedback (to -1 and out until 2026-09-13, Frank: small, not gone)
-    v.burn=lerp(.15,v.burn,v.boostTime>time?1:0); // the boost: the ribbon and nozzles swell and shrink over a few frames, never snap
+    // the engine light follows the gas (enhanced: a partial trigger lights it partway): off
+    // the gas it shrinks as at rest; on the brake it eases to -.5, so the ribbon narrows to
+    // a quarter and the nozzles to .15 of their size, the brake's feedback (small, not gone)
+    v.throttle=lerp(.15,v.throttle,c.brake?-.5:c.gas?enhancedMode?+c.gas:1:0);
+    // the boost: the ribbon and nozzles swell and shrink over a few frames, never snap
+    v.burn=lerp(.15,v.burn,v.boostTime>time?1:0);
 
     // a non-finite state is treated as a death: the respawn below rebuilds it from the route
     if(!isFinite(v.pos.x+v.pos.y+v.pos.z+v.velocity.mag()))
         v.deadUntil=time;
     if(v.deadUntil)
     {
-        // the player never respawns: running out of energy ends the race. A rival (and the
-        // attract lap's player craft) respawns at the last gate passed with half energy and
-        // a fresh trail
+        // after the wait, respawn at the last gate passed with half energy and a fresh trail.
+        // The player's craft too: its death has ended the race (racing is false from then
+        // on) and the AI drives it on; it never respawns inside a live race
         if(time<v.deadUntil || racing(v)) return;
         v.place(v.nextGate-lapDistance/8);
         v.energy=50;
@@ -368,44 +381,44 @@ function stepVehicle(v,c,dt)
             for(let i=60;i--;) updateCamera();
         }
     }
-    if(v.energy<=0 && !(v===playerVehicle && gameOverTime)) // the player cannot die after the finish (2026-09-13)
+    // death: the explosion (drawTrails), two seconds stopped, then the respawn above. The
+    // player cannot die once the race is over; in a race its death ends it, and the results
+    // card reads OUT from deadUntil
+    if(v.energy<=0 && !(v===playerVehicle && gameOverTime))
     {
-        // death: the explosion (drawTrails), two seconds stopped, then the respawn above.
-        // The player's death ends the race: the results card, dead last on the next grid
         v.deadUntil=time+2;
         v.velocity=vec3();
         v.speed=0;
         if(racing(v))
         {
             sound_lose.play(.7);
-            gameOverTime=time; // (the grid no longer moves with the last place, so a death sets nothing: the results card reads OUT from deadUntil)
-            wavedashMode && wdExplode(); // the secret Supernova achievement on Wavedash (wavedash.js)
-            newgroundsMode && ngExplode(); // and the Newgrounds medal (newgrounds.js)
+            gameOverTime=time;
+            wavedashMode && wdExplode();   // the secret achievement for exploding (wavedash.js)
+            newgroundsMode && ngExplode(); // and its Newgrounds medal (newgrounds.js)
         }
         return;
     }
     if(startCountdown) { v.speed=0; return; }
 
     const speed=v.velocity.mag();
-    // (a POWER SLIDE, brake+steer at speed with a low grip, a carve and a charged release burst,
-    // went on 2026-09-13: Frank could not get it to work and took the hardest corners faster off
-    // the gas; the brake came back the same day as a plain slow-down: Down, the middle button)
-    v.playerTurn=lerp(.3,v.playerTurn,c.steer)||0; // the visual lean (||0: a non-finite state is steered by controls the AI worked out from it, and craftMatrix's DOMMatrix throws on a NaN lean, losing every later frame, since a lerp from NaN stays NaN; the recovery above reseats the craft but this frame's steer is already poisoned. test/world-systems.js's "invalid movement safely recovers")
 
-    // heading rate: steerRate above 10,500, so the turning radius IS the speed and slowing down
-    // turns you tighter (the knee was 21,000 until 2026-09-13: from 9,450 up the radius was a flat
-    // 21,000, the coast steer hid it, and without that the rivals died on UMBRA's 12,000 corners; the coast
-    // steer came back the same hour at 1.5, the knee stayed),
-    // scaled down with speed under it to a .45 floor, high enough to turn away from a wall you
-    // have stopped against
+    // the visual lean. ||0: craftMatrix's DOMMatrix throws on a NaN lean and a lerp from NaN
+    // stays NaN, so one poisoned steer would lose every later frame. A non-finite state gets
+    // here because the AI worked this step's controls out from it before the reseat above
+    // (test/world-systems.js, "invalid movement safely recovers")
+    v.playerTurn=lerp(.3,v.playerTurn,c.steer)||0;
+
+    // heading rate: steerRate from 10,500 up, so the turning radius is the speed and slowing
+    // down turns you tighter; scaled down with speed under that to a .45 floor, high enough
+    // to turn away from a wall you have stopped against
     let rate=steerRate*clamp(speed/10500,.45,1);
-    // the steer multiplier: the player turns coastSteer times faster off the gas and turboSteer on the
-    // turbo, eased over steerEase; ANY craft on the brake or off the gas turns at coastSteer (a rival, or the
-    // player's craft when the AI drives it behind the title)
-    // the turbo is on while its button is down OR inside a press's committed window (boostPower, below), and only while it
-    // can run (energy over 1): the steer and the boost both follow it (the steer followed the button alone until the
-    // post-deadline fix: a tap boosted on without the turbo's steer, and an empty turbo steered like a running one)
+
+    // the turbo is on while its button is down or inside a press's committed window
+    // (boostPower, below), and only while it can run (energy over 1): the steer and the
+    // boost both follow it, so a tap steers like the turbo it runs and an empty one does not
     const turbo=(c.boost || v.boostPower>time) && v.energy>1;
+    // the steer multiplier: any craft on the brake or off the gas turns at coastSteer; the
+    // player's turbo turns at turboSteer, and the player's multiplier is eased over steerEase
     const mul=c.brake?coastSteer:turbo&&v===playerVehicle?turboSteer:c.gas?1:coastSteer;
     rate*=v===playerVehicle?steerMul=lerp(dt/steerEase,steerMul,mul):mul;
     v.heading+=c.steer*rate*dt;
@@ -424,33 +437,34 @@ function stepVehicle(v,c,dt)
     const m=v.velocity.mag();
     if(m) v.velocity=v.velocity.scale(lerp(gripKeep,m,speed)/m);
 
-    // held boost: 25 energy/s for the player (a rival's catch-up boost is free: rivals never charge, so wanting 50
-    // energy spent every rival's boost in the first lap, 2026-09-13), full power. It never drains the last unit: at 1
-    // the turbo just stops, and only a wall or a craft can finish you. A PRESS COMMITS .5 s (Frank, the post-deadline
-    // fix): boostPower holds the end of that window (any non-zero value is a turbo's power), and inside it the turbo
-    // runs and drains as if held (.1 felt like a tap, .5 a decision). Until then a free .12 s tail followed every step the button was down, so tapping
-    // one step in eight kept full power for an eighth of the energy
+    // the held turbo: 25 energy/s for the player, free for a rival (rivals never charge).
+    // It never drains the last unit: at 1 the turbo just stops, and only a wall or a craft
+    // can finish you. A press commits .5 s: boostPower holds the end of that window, and
+    // inside it the turbo runs and drains as if held, so tapping saves no energy.
+    // A non-zero boostPower also marks the running boost as a turbo's, not a pad's
     if(turbo)
     {
         v.energy=max(1,v.energy-25*dt*(v==playerVehicle));
-        if(v.boostTime<time || !v.boostPower) racing(v) && sound_boost.play(.5), v.boostPower=time+.5; // a press: no boost, or a pad's
+        // a press: no boost was running, or only a pad's
+        if(v.boostTime<time || !v.boostPower) racing(v) && sound_boost.play(.5), v.boostPower=time+.5;
         v.boostTime=max(v.boostTime,time+.02); // one step on: no free tail
     }
 
-    // speed caps: normal 32,000 (or the AI's target, c.cap); pads 39,000 with the turbo's 20,000 thrust (36,000 and 13,500 until the post-deadline tuning, Frank: pads felt weak, barely faster than the gas; 38,000 with 20,000 built over the limit); held boost 40,000
+    // speed caps: normal 32,000 (or the AI's target, c.cap), a pad's boost 39,000, the turbo 40,000
     const boosted=v.boostTime>time, cap=boosted?(v.boostPower?40000:39000):c.cap||maxCraftSpeed;
-    // the brake cuts the gas AND any boost (a boost's thrust ignored the brake until the post-deadline fix, so braking
-    // after a pad or on the turbo still gained speed: 13,500 or 20,000 of thrust against the brake's 10,500)
-    let accel=c.brake?0:boosted?(v.boostPower?20000:20000):c.gas?9600*(enhancedMode?c.gas:1):0; // units/s^2 (enhanced: gas is 0..1 from the gamepad's right trigger; keys and mouse give 0 or 1)
+    // thrust (units/s^2): the gas 9,600 (enhanced: times the 0..1 trigger), any boost 20,000
+    // (turbo and pad are equal, written apart so they can differ). The brake cuts the gas
+    // and the boost's thrust too, or braking on a boost would still gain speed
+    let accel=c.brake?0:boosted?(v.boostPower?20000:20000):c.gas?9600*(enhancedMode?c.gas:1):0;
     if(speed>=cap) accel=0;
     v.velocity.addSelf(v.forward.scale(accel*dt));
-    // deceleration (units/s^2): the brake 10,500, coasting 1,000 (2,700 before: a release
-    // should carry), gas 0
+    // deceleration (units/s^2): the brake 10,500, coasting 1,000 (a release should carry), gas 0
     const braking=c.brake?10500:c.gas?0:1000;
     let newSpeed=max(0,v.velocity.mag()-braking*dt);
     // over the cap (a boost that just ended): bleed down at 7,500/s instead of snapping
     if(newSpeed>cap) newSpeed=speed<=cap?cap:max(cap,newSpeed-7500*dt);
-    v.velocity=v.velocity.normalize().scale(newSpeed); // (a zero velocity: newSpeed is 0, and normalize's (1,1,1) fallback scales to zero)
+    // (a zero velocity: newSpeed is 0, and normalize's (1,1,1) fallback scales to zero)
+    v.velocity=v.velocity.normalize().scale(newSpeed);
 
     // short moves (80 units, at most 16 of them) keep containment continuous even at
     // boosts and lap seams
@@ -467,42 +481,45 @@ function stepVehicle(v,c,dt)
     // craft: its grip would otherwise turn every bit of speed into the wall
     if(wall) v.heading+=clampAngle(info.heading-v.heading)*min(1,3*dt);
 
-    // boost pad (roadType 1): within .95 of a lane of the pad's lane centre, just inside its drawn 1,400 (.45 inside 700 until
-    // 2026-09-13: hard to see and to hit, Frank), .3 s cooldown; an .8 s boost (to 39,000 at the turbo's thrust since the post-deadline tuning) that never downgrades a held boost.
-    // The cooldown was .5 s until the post-deadline fix: the second pad of a pair (120 samples on, trackGen.js) comes .35-.55 s
-    // after the first at pad or turbo speed, so it gave no boost and no sound in 20 of 42 runs (local/pad-pair-probe.js)
+    // boost pad (roadType 1): within .95 of a lane of the pad's lane centre, just inside its
+    // drawn 1,400; an .8 s boost that never downgrades a held turbo. The cooldown is .3 s:
+    // the second pad of a pair (120 samples on, trackGen.js) comes .35-.55 s after the first
+    // at pad or turbo speed, and must count
     if(t.roadType==1 && abs(v.localX-t.padX)<laneWidth*.95 && time>v.padTime+.3)
     {
         if(v.boostTime<time) v.boostPower=0;
         v.boostTime=max(v.boostTime,time+.8); v.padTime=time;
         racing(v) && sound_boost.play(.5, 2);
     }
+
     // the recharge strip (roadType 2): the outer stripWidth units on the padX side, 60 energy/s.
-    // v.charging (drawTrails draws sparks under a charging craft) is on only while energy still rises
+    // v.charging is on only while energy still rises (drawTrails draws sparks under the craft)
     v.charging=t.roadType==2 && v.localX*t.padX>info.w-levelInfo.stripWidth && v.energy<100;
     if(v.charging) v.energy=min(100,v.energy+60*dt);
     // the charge blip: at once on starting to charge (stopping resets the timer), then
     // every .3 s while charging; silent at full energy
     if(racing(v)) v.charging ? time>chargeTime && (chargeTime=time+.3, sound_charge.play(.4)) : chargeTime=0;
-    // the rough shoulder (roadType 3, F-Zero's damaged verge): the outer two and a half lanes on the
-    // padX side drag anyone on them at 1.5/s, and rattle the player: a bump every 3,000-4,500 units
-    // travelled, so it fires faster the faster you go, louder with speed (Drive13K's offroad bumps,
-    // Frank 2026-09-13). A held turbo (boostPower, not a pad's boost) skims over it: no drag, no rattle
+
+    // the rough shoulder (roadType 3): the outer two and a half lanes on the padX side drag
+    // anyone on them at 1.5/s and rattle the player: a bump every 3,000-4,500 units travelled,
+    // so faster the faster you go, and louder with speed. A held turbo (boostPower, not a
+    // pad's boost) skims over it: no drag, no rattle
     if(t.roadType==3 && !(boosted&&v.boostPower) && v.localX*t.padX>info.w*bermStart-2.5*laneWidth)
         v.velocity=v.velocity.scale(1-1.5*dt), racing(v) && (bumpDistance-=v.speed*dt)<0 && (bumpDistance=3e3*(1+Math.random()/2), sound_slowBump.play(clamp(v.speed/32e3)));
 
-    // ordered gates are route metadata. Teleporting/debug placement is not a lap: a gate
-    // only counts while the craft is past it by under 1,500 route units. (Until the post-deadline fix it counted only
-    // when this step STARTED short of it, but checkCraftContacts re-seats both craft after their steps, which moves s:
-    // a nudge from just short of a gate to just past it skipped that gate, and so every later one, for good. A rival's
-    // laps froze; the player's race could never finish)
+    // ordered gates are route metadata. Teleporting/debug placement is not a lap: a gate only
+    // counts while the craft is past it by under 1,500 route units. Do not test whether the
+    // step started short of the gate: checkCraftContacts re-seats both craft after their
+    // steps, and a nudge across a gate would skip it, and so every later one, for good
     if(v.s>=v.nextGate && v.s-v.nextGate<1500)
     {
         ++v.gates; v.nextGate+=lapDistance/8;
         const lap=(v.gates-1)/8|0; // (gates is at least 1 here)
         if(lap>v.lap && v===playerVehicle)
         {
-            playerLap=lap; lap<raceLaps&&(lapBeeps=3); // the checkpoint beep, three times (updateCars), except on the finish: the first beep played under the finish sound (the finish is detected after the beeps below; the post-deadline fix)
+            // the checkpoint beep, three times (updateCars), except on the finishing lap: it
+            // would play under the finish sound
+            playerLap=lap; lap<raceLaps&&(lapBeeps=3);
         }
         v.lap=lap;
     }
@@ -521,37 +538,34 @@ function stepVehicle(v,c,dt)
 
 function updateCars()
 {
-    // (playerVehicle.energy was copied back INTO the craft here; it is only ever written from the
-    // craft below, so the round trip did nothing and went on 2026-09-13. The suites that
-    // poke energy set v.energy and playerVehicle.energy together)
     for(const v of vehicles)
     {
         let c;
-        if(v!==playerVehicle || titleScreenMode || testDrive || gameOverTime) c=driveAI(v); // the race over (a finish or a death), the AI drives the player's craft on and the field keeps racing (Frank, 2026-09-15: everyone braked to a stop until then)
+        // the AI drives every rival, and the player's craft behind the title and menu, under
+        // autodrive and once the race is over (a finish or a death): the field races on
+        if(v!==playerVehicle || titleScreenMode || testDrive || gameOverTime) c=driveAI(v);
         else
         {
-            // keys ramp the steer over about a fifth of a second both ways (a digital lock
-            // was too twitchy); the mouse below is direct
-            keySteer=lerp(keySteerEase,keySteer,(keyIsDown('ArrowRight')|keyIsDown('KeyD'))-(keyIsDown('ArrowLeft')|keyIsDown('KeyA'))); // W, A and D beside the arrows in every build (2026-09-13: reading the keys here is far smaller than the enhanced build's remap in the 13k build, +63)
-            // Space brakes, left Shift is the turbo (Down and Space until 2026-09-13: Down cannot be held with the steer keys, Frank);
-            // the enhanced build brakes on Down and S too (Frank, 2026-09-16: WASD and the arrows are a full set), written as a
+            // keys ramp the steer over about a quarter of a second both ways (a digital lock
+            // is too twitchy); the mouse below is direct. W, A and D are read beside the
+            // arrows here in every build: far smaller in the 13k build than a key remap
+            keySteer=lerp(keySteerEase,keySteer,(keyIsDown('ArrowRight')|keyIsDown('KeyD'))-(keyIsDown('ArrowLeft')|keyIsDown('KeyA')));
+            // Space brakes (Down cannot be held with the steer keys on many keyboards), left
+            // Shift is the turbo; the enhanced build brakes on Down and S too, written as a
             // conditional so the 13k build folds to Space alone
             c={steer:keySteer,gas:keyIsDown('ArrowUp')|keyIsDown('KeyW'),brake:enhancedMode?keyIsDown('Space')|keyIsDown('ArrowDown')|keyIsDown('KeyS'):keyIsDown('Space'),boost:keyIsDown('ShiftLeft')};
-            // the gas key hands steering back to the keys, before the mouse steer applies (the post-deadline fixes: a click to
-            // race from the menu left the pointer parked over the list, steering full left off the grid; any key did it in
-            // input.js for a day, so Space ended mouse mode and a mouse player could not brake on it, Frank 2026-09-14; the gas
-            // and steer keys priced 6 over, and a keyboard player always gasses to go)
+            // the gas key hands steering back to the keys, before the mouse steer applies: a
+            // click to race from the menu leaves the pointer parked over the list, full left
+            // lock, and a keyboard player always gasses to go. Not any key: Space and Shift
+            // keep mouse mode, so a mouse player brakes and boosts from the keyboard
             mouseMode &= !c.gas;
-            // the enhanced build hands it back on ANY of the arrows or WASD (Frank, 2026-09-16: a Newgrounds player was "softlocked
-            // into mouse control" steering with the arrows, since a click turned mouse mode on and only the gas key ended it);
-            // Space and Shift still keep it, so a mouse player brakes and boosts from the keyboard
+            // the enhanced build hands it back on any of the arrows or WASD, or a player
+            // steering on the arrows after a click is stuck in mouse control
             if(enhancedMode && (keyIsDown('ArrowLeft')|keyIsDown('ArrowRight')|keyIsDown('ArrowDown')|keyIsDown('KeyA')|keyIsDown('KeyD')|keyIsDown('KeyS')))
                 mouseMode=0;
-            // mouse mode (a click enters it, the gas key leaves it): the pointer steers
-            // by its distance from centre even with no button held (full lock a third of the
-            // way out); left drives, right is the turbo, middle brakes (a plain slow-down since the drift went on 2026-09-13;
-            // a right-button brake with the turbo on Space alone lasted an hour; an automatic gas was
-            // too confusing)
+            // mouse mode (a click enters it, input.js): the pointer steers by its distance from
+            // centre even with no button held (full lock a third of the way out); left drives,
+            // middle brakes, right is the turbo
             if(mouseMode)
             {
                 c.steer=clamp(mouseX*3,-1,1);
@@ -559,22 +573,23 @@ function updateCars()
                 c.brake|=mouseButtons>>1&1;
                 c.boost|=mouseButtons>>2&1;
             }
-            // (steer locks and a follow mode were tried and dropped: plain steering)
-            if(debug && testTurn) c.steer=testTurn; // analog steer for the drift suite
+            if(debug && testTurn) c.steer=testTurn; // a steer override for tests (debug.js)
             // gamepad: dev and enhanced builds only (folded out of the 13k build)
             if(enhancedMode && isUsingGamepad)
             {
                 c.steer=gamepadStick(0).x;
-                c.gas=max(gamepadIsDown(0), gamepadDataValues[0]?.[7]||0); // A full, or the right trigger ANALOG, 0..1 past its dead zone (Frank, 2026-09-15: it was on or off)
-                c.brake=gamepadIsDown(2)||gamepadIsDown(6); // X or the left trigger, on or off (B brakes no more: it is a turbo button)
-                c.boost=gamepadIsDown(1)||gamepadIsDown(5); // B or RB (Frank, 2026-09-15: B added)
+                // A full, or the right trigger, analog 0..1 past its dead zone
+                c.gas=max(gamepadIsDown(0), gamepadDataValues[0]?.[7]||0);
+                c.brake=gamepadIsDown(2)||gamepadIsDown(6); // X or the left trigger, on or off
+                c.boost=gamepadIsDown(1)||gamepadIsDown(5); // B or RB
             }
+            // the dev free camera has the keys and the mouse: the craft coasts (Q's autodrive,
+            // switched on before the free cam, still drives it)
+            if(debug && freeCamMode) c={steer:keySteer=0};
         }
         stepVehicle(v,c,timeDelta);
     }
     checkCraftContacts();
-
-    // the HUD reads the player's state through these globals
 
     // engine loop: pitch follows speed; silent on the title, the countdown, death, the
     // finish and without focus (playSamples refuses unfocused and onblur stops the loop).
@@ -582,10 +597,11 @@ function updateCars()
     if(!titleScreenMode && !startCountdown && !playerVehicle.deadUntil && !gameOverTime && soundVolume)
     {
         // low energy warning: from 25, where the meter starts flashing, a tick at one volume
-        // whose period shrinks from .55 s at 25 to .05 s at zero (an echoing countdown beep
-        // under 10 did not read as a warning)
+        // whose period shrinks from .55 s at 25 to .05 s at zero and whose pitch rises from
+        // 1.5 to 2
         if(playerVehicle.energy<25 && time>lowBeepTime) lowBeepTime=time+.05+playerVehicle.energy*.02, sound_checkpoint.play(.5,2-playerVehicle.energy/50);
-        if(lapBeeps && time>lapBeepTime) lapBeepTime=time+.15, --lapBeeps, sound_checkpoint.play(.7); // a lap: three beeps .15 s apart
+        // a lap: three beeps .15 s apart
+        if(lapBeeps && time>lapBeepTime) lapBeepTime=time+.15, --lapBeeps, sound_checkpoint.play(.7);
         if(!engineSound) engineSound=sound_engine.play(.04);
         if(engineSound)
         {
@@ -600,7 +616,7 @@ function updateCars()
     }
 
     playerPlace=1+vehicles.filter(v=>v.raceDistance>playerVehicle.raceDistance).length;
-    // the finish: record the placing and the time (debug skips poison the records)
+    // the finish: record the placing and the time (never after a debug skip)
     if(playerLap>=raceLaps && !gameOverTime && !titleScreenMode)
     {
         playerWin=1;
@@ -612,11 +628,15 @@ function updateCars()
             // the best placing on this circuit, one digit per circuit (0 = never finished);
             // the menu shows it and browses up to the circuit after the last one finished
             if(!(bestPlaces[currentCircuit]|0) || playerPlace<bestPlaces[currentCircuit]) bestPlaces=bestPlaces.slice(0,currentCircuit)+playerPlace+bestPlaces.slice(currentCircuit+1);
-            // and the best time, kept apart: a better time can come with a worse place (Frank, 2026-09-13)
+            // and the best time, kept apart: a better time can come with a worse place
             bestTimes[currentCircuit]=min(bestTimes[currentCircuit]||1e9,raceTime); // 0 or empty is none
             writeSaveData();
-            wavedashMode && wdFinish(); // the circuit's Wavedash board, the achievements and the cloud bests (wavedash.js), after the save holds them
-            newgroundsMode && ngFinish(); // the circuit's Newgrounds scoreboard and the medals (newgrounds.js)
+            // the platform hooks, after the save holds the result, with no arguments so the
+            // 13k build folds each call away whole: the circuit's Wavedash board, the
+            // achievements and the cloud bests (wavedash.js); the Newgrounds scoreboard and
+            // medals (newgrounds.js)
+            wavedashMode && wdFinish();
+            newgroundsMode && ngFinish();
         }
     }
 }
@@ -640,8 +660,8 @@ function checkCraftContacts()
 
         // slab test of the relative motion segment against an expanded craft box (half
         // extents: 220 up, 600 along, 360 across, so vertically separated decks never
-        // touch; 760/480 hit craft that did not look close). A boost-speed head-on
-        // crossing can traverse the entire box in one tick
+        // touch; 760/480 hits craft that do not look close). A boost-speed head-on
+        // crossing can traverse the entire box in one tick, hence the sweep
         let enter=0, leave=1;
         for(const [axis,size] of [[info.up,220],[info.forward,600],[info.right,360]])
         {
@@ -659,9 +679,8 @@ function checkCraftContacts()
         if(time>(contactTimes[key]??-1))
         {
             // the hit scales with the closing speed, full at 8,000: both lose up to 18% of
-            // their speed and 4 energy (6 stacked up in a pack), and any slide or charge.
-            // A rub at the same pace is nearly free: a flat cost had a field of 20
-            // bleeding out in the first 30 s (3-10 deaths a start, measured)
+            // their speed and 4 energy. A rub at the same pace is nearly free: a flat cost
+            // bleeds a packed field out in the first 30 s of a race
             const k=clamp(b.velocity.subtract(a.velocity).mag()/8000);
             a.velocity=a.velocity.scale(1-.18*k);
             b.velocity=b.velocity.scale(1-.18*k);

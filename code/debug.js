@@ -3,47 +3,52 @@
 ///////////////////////////////////////////////////////////////////////////////
 // debug.js - build flags and the dev-only tools
 //
-// Loads FIRST. In a release build this whole file is replaced by release.js
-// (enhanced) or releaseJS13K.js (13k), which declare the same names as `const 0`
-// plus empty stubs for every function below, so terser folds every `debug &&`,
-// `devMode` and `freeCamMode` branch out of the shipped game. The names and the
-// stub list in those two files must stay in step with this one.
+// Loads first. In a release build this whole file is replaced by release.js (enhanced) or
+// releaseJS13K.js (13k), which declare the same names as `const 0` plus empty stubs for
+// every function below, so terser folds every `debug &&`, `devMode` and `freeCamMode`
+// branch out of the shipped game. The names and the stub list in those two files must stay
+// in step with this one.
 //
 // Owns: the flags, the dev counters the readout and the tests read (averageFPS,
-// glDrawCalls, glStaticBytes...), the free cam, the top-down map view, the dev
-// key handling, the console commands and the screenshot/text download helpers.
+// glDrawCalls, glStaticBytes...), the free cam, the top-down map view, the dev key
+// handling, the console commands and the screenshot/text download helpers.
 //
-// Entry points, all called from game.js under `debug &&`: debugInit() after
-// inputInit (it chains onto the mouse handler), debugUpdate() each frame before
-// the game update, debugDraw() at the end of the frame. Other files write the
-// counters under `debug &&` (game.js, webgl.js, draw.js, track.js) and vehicle.js
-// reads testTurn; game.js reads freeCamPos/freeCamRot to place the camera. The
-// dev keys that ship in the dev build only (Home, M, N, R, +/-) live in game.js;
-// everything behind devMode lives here.
+// Called from game.js, all under `debug &&`: debugInit() after inputInit (it chains onto
+// the mouse handlers), debugUpdate() each frame, debugDraw() at the end of the frame.
+// Other files write the counters under `debug &&` (game.js, webgl.js, draw.js, track.js);
+// vehicle.js reads testTurn; game.js reads freeCamPos/freeCamRot to place the camera.
+// The N skip and the +/- time scale are read in game.js (behind devMode too); every other
+// dev key is here. This page is also the public one, so every dev key needs dev mode.
+///////////////////////////////////////////////////////////////////////////////
 
 const debug = 1;
-let enhancedMode = 1; // the enhanced build: gamepad, WASD, aspect clamp (const 0 in releaseJS13K.js)
-let wavedashMode = 1; // the Wavedash hooks (wavedash.js), which do nothing without window.Wavedash (const 0 in releaseJS13K.js)
-let newgroundsMode = 1; // the Newgrounds hooks (newgrounds.js), which do nothing outside a logged-in Newgrounds session (const 0 in releaseJS13K.js)
+// all three are const 0 in releaseJS13K.js
+let enhancedMode = 1;   // the enhanced build: gamepad, WASD, aspect clamp
+let wavedashMode = 1;   // the wavedash.js hooks, idle without window.Wavedash
+let newgroundsMode = 1; // the newgrounds.js hooks, idle outside a logged-in Newgrounds session
 let enableAsserts = 1;
-let devMode = 0; // the dev() console command toggles it (the Home key until 2026-09-13); every dev key needs it, so a visitor to the public page plays the plain game. Saved in localStorage.SP13KDEV (devSet), so a reload stays in dev mode
-let topDownMode = 0, topDownZoom = 1, topDownPan; // T: an orthographic map view straight down over the loop (glPreRender, updateCamera); the wheel zooms, WASD pans
+
+// the dev() console command toggles it; every dev key needs it, so a visitor to the public
+// page plays the plain game. Saved in localStorage.SP13KDEV (devSet): a reload stays in dev mode
+let devMode = 0;
+
+// T: an orthographic map view straight down over the loop (glPreRender, updateCamera);
+// the wheel zooms, WASD pans
+let topDownMode = 0, topDownZoom = 1, topDownPan, topDownRotate = 0, topDownCraftScale = 6;
 let downloadLink, debugMesh, debugCapture, debugCanvas;
 
-// a debug skip of d quarter laps (N, and 1/2): world placement through place(), then the gates
-// crossed are counted, so a skip is a way along the lap and twelve of them finish the race
-// (before, a skip landed past its gates and the lap never counted); it poisons the run, so
-// no placing is recorded
+// a debug skip of d quarter laps (N, and 1/2): world placement through place(), then the
+// gates crossed are counted, so twelve skips finish the race
 function debugSkip(d)
 {
     playerVehicle.place(playerVehicle.s + d*lapDistance/4);
     debugCatchGates();
 }
 
-// after any dev relocation: the gates catch up with the player's route position (both ways) and the lap follows, with
-// the lap beeps when it moves on to a new lap. Every relocation needs it: the 3/4 creep moved the craft past gates
-// without counting them, so the next gate stayed behind and no gate or lap counted for the rest of the race, and a
-// skip over the line counted the lap in silence (2026-09-13). The run is poisoned for records
+// after any dev relocation: the gates catch up with the player's route position (both ways)
+// and the lap follows, with the lap beeps when it moves on to a new lap. Every relocation
+// needs it, or the next gate stays behind the craft and no gate or lap counts again.
+// The run is poisoned for records
 function debugCatchGates()
 {
     const v = playerVehicle;
@@ -55,7 +60,9 @@ function debugCatchGates()
     debugSkipped = 1;
 }
 
-let debugInfo=0, debugSkipped=0; // the readout, on with dev mode; the run used a skip, so no record time
+// debugInfo: the readout, on with dev mode
+// debugSkipped: the run used a skip or relocation, so no record
+let debugInfo=0, debugSkipped=0;
 
 // dev mode on or off, with its readout, remembered for the next load
 function devSet(on)
@@ -65,15 +72,22 @@ function devSet(on)
 }
 
 let freeCamPos, freeCamRot, mouseDelta;
-const freeCamSaveName = 'SP13KFREECAM'; // the free cam bookmark (debugInit); freeCamRestore = [s, x] of the player to reseat
-let freeCamRestore, freeCamStarted = 0; // freeCamStarted: the free cam has taken its pose and asked for the pointer once (debugUpdate)
-// dev flags (the release files declare these as const 0 so terser folds every branch)
+const freeCamSaveName = 'SP13KFREECAM'; // the free cam bookmark (debugInit)
+
+// freeCamRestore: [s, x] of the player to reseat after a reload into the bookmark
+// freeCamStarted: the free cam has taken its pose and asked for the pointer once (debugUpdate)
+let freeCamRestore, freeCamStarted = 0, freeCamStep = 1; // freeCamStep: this update's share of a fixed step (debugPausedUpdate)
+
+// dev flags (the release files declare these as const 0 so terser folds every branch).
+// Never set quickStart from another file: it is a const there and the packed page throws
 let clampAspectRatios = 1;
 let testLevel, quickStart, disableAiVehicles, testDrive, freeCamMode, testLevelInfo;
 quickStart = localStorage.SP13KQUICK|0; // the quick() console command, remembered (game.js reads it at load)
 
-// dev CONSOLE COMMANDS (words in the devtools console instead of number keys); debugInit
-// lists them at startup. Each is a plain global function
+///////////////////////////////////////////////////////////////////////////////
+// console commands: words typed in the devtools console; debugInit lists them at startup.
+// Each is a plain global function
+
 const devCommands = {
     dev: 'dev mode on/off, remembered across reloads: every dev key ([ ] N F T + - and the rest) works only in it',
     quick: 'quick start on/off, remembered across reloads (reloads now): straight into the race, no title or countdown',
@@ -85,9 +99,13 @@ const devCommands = {
     touch: 'the touch gamepad without a touch screen on/off, remembered across reloads: it shows in a race, driven by the mouse',
 };
 let showRegions = 0;
+
 function dev() { devSet(!devMode); return 'dev mode ' + (devMode ? 'on: the dev keys work' : 'off'); }
+
 function regions() { showRegions = !showRegions; return 'regions ' + (showRegions ? 'on' : 'off'); }
-function touch() // touch.js reads SP13KTOUCH at load; the pad appears at the next step of a race
+
+// touch.js reads SP13KTOUCH at load; the pad appears at the next step of a race
+function touch()
 {
     touchForce = !touchForce;
     touchForce ? localStorage.SP13KTOUCH = 1 : delete localStorage.SP13KTOUCH;
@@ -99,10 +117,12 @@ function drawRegions()
 {
     const ctx = mainContext, W = mainCanvasSize.x, H = mainCanvasSize.y;
     ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1;
-    for (let c = 0; c <= circuitCount + 2; ++c) // row circuitCount is CHANGE TEAM, circuitCount+1 PLAY, circuitCount+2 FULL SCREEN (the dev page is enhanced)
+    // rows past the circuits: circuitCount is CHANGE TEAM, +1 PLAY, +2 FULL SCREEN (the dev page is enhanced)
+    for (let c = 0; c <= circuitCount + 2; ++c)
     {
         if (menuRowW[c] < -2) continue; // FULL SCREEN while hidden
-        const x0 = getAspect() < 1 && c == circuitCount + 1 ? (1-menuRowW[c])/2 : menuRowX(); // the portrait menu's PLAY is centred (menuRowAt)
+        // the portrait menu's PLAY is centred (menuRowAt)
+        const x0 = getAspect() < 1 && c == circuitCount + 1 ? (1-menuRowW[c])/2 : menuRowX();
         ctx.strokeRect(x0*W, (menuRowY(c)-menuRowSize(c)*.45)*H, ((menuRowW[c]+1)/2-x0)*W, menuRowSize(c)*.9*H);
     }
 }
@@ -113,14 +133,17 @@ function quick()
     location.reload();
 }
 
-function menu() // the page opens on the menu (debugInit sets menuMode from the flag)
+// the page opens on the menu (debugInit sets menuMode from the flag)
+function menu()
 {
     localStorage.SP13KMENU ? delete localStorage.SP13KMENU : localStorage.SP13KMENU = 1;
     location.reload();
 }
 
 function unlock() { bestPlaces = '8'.repeat(circuitCount); writeSaveData(); return 'every circuit unlocked'; }
-function places() // random placings and times (a minute to four) on every circuit, saved
+
+// random placings and times (a minute to four) on every circuit, saved
+function places()
 {
     bestPlaces = Array.from({length: circuitCount}, () => randInt(8)+1).join('');
     bestTimes = Array.from({length: circuitCount}, () => rand(60, 240));
@@ -135,21 +158,33 @@ function finish()
     return 'finishing';
 }
 
-let testTurn = 0; // analog steer for the drift suite (keyboard turn is binary): vehicle.js reads it under `debug &&`
-let averageFPS = 0, glBatchCountTotal, glDrawCalls; // the readout's counters, written under `debug &&` in game.js / webgl.js
-let glUploadBytes=0, glLiveBuffers=0, glStaticBytes=0, glStaticUploads=0, worldBuildCount=0, roadPanels=[]; // resource lifecycle counters for the circuits/world-probe tests
-let skylineSites; // [x, z, margin, height] per placed scenery piece, recorded under `debug &&` in buildScenery
+///////////////////////////////////////////////////////////////////////////////
+// test hooks and counters
 
-// ASSERT is an empty function in the release, but its ARGUMENTS still ship: gate
-// a call whose arguments do work behind `debug &&` (see Vector3's constructor)
+// an analog steer override a test can set (keyboard turn is binary): vehicle.js reads it under `debug &&`
+let testTurn = 0;
+
+// the readout's counters, written under `debug &&` in game.js / webgl.js
+let averageFPS = 0, glBatchCountTotal, glDrawCalls;
+
+// resource lifecycle counters for the circuits/world-probe tests
+let glUploadBytes=0, glLiveBuffers=0, glStaticBytes=0, glStaticUploads=0, worldBuildCount=0, roadPanels=[];
+
+// [x, z, margin, height] per placed scenery piece, recorded under `debug &&` in buildScenery
+let skylineSites;
+
+// ASSERT is an empty function in the release, but its arguments still ship: gate a call
+// whose arguments do work behind `debug &&` (see Vector3's constructor)
 function ASSERT(assert, output)
 { enableAsserts&&(output ? console.assert(assert, output) : console.assert(assert)); }
+
 function LOG() { console.log(...arguments); }
 
-// the free cam's rotations (the shipped game turns only constant vectors, written out inline)
+// Vector3 methods only the tests and the free cam use (the shipped game copies with
+// scale(1) and turns only constant vectors, written out inline)
 function debugVectorMethods()
 {
-    Vector3.prototype.copy = function() { return vec3(this.x, this.y, this.z); } // the tests and the free cam (the game uses scale(1): copy went for size on 2026-09-13)
+    Vector3.prototype.copy = function() { return vec3(this.x, this.y, this.z); }
     Vector3.prototype.rotateX = function(a)
     {
         const c=Math.cos(a), s=Math.sin(a);
@@ -162,9 +197,10 @@ function debugVectorMethods()
     }
 }
 
-// the dev page's Wavedash SDK mock: index.html#wd installs it, #wd2 also seeds a cloud save (the first seven circuits won),
-// so the hooks in wavedash.js can be watched without the platform. Every call logs as WAVEDASH name args and is recorded
-// in window.wdCalls (test/wavedash-walk.js --dev reads it); the files live in memory, as the SDK's shapes in 1.3.48
+// the dev page's Wavedash SDK mock, so the hooks in wavedash.js can be watched without the
+// platform: index.html#wd installs it, #wd2 also seeds a cloud save (the first seven
+// circuits won). Every call logs as WAVEDASH name args and is recorded in window.wdCalls
+// (test/wavedash-walk.js --dev reads it); the files live in memory, in the SDK's shapes (1.3.48)
 function debugWavedashMock(seed)
 {
     const local = {}, remote = {}, ok = data => Promise.resolve({success: true, data});
@@ -196,17 +232,34 @@ function debugWavedashMock(seed)
 function debugInit()
 {
     debugVectorMethods();
+
+    // the map view draws every craft and its trail topDownCraftScale times the size: at a
+    // whole loop to the window a real hull is about a pixel
+    const craftMatrix = Vehicle.prototype.craftMatrix, recordTrail = Vehicle.prototype.recordTrail;
+    Vehicle.prototype.craftMatrix = function()
+    {
+        const m = craftMatrix.call(this), s = topDownCraftScale;
+        return topDownMode ? m.scaleSelf(s, s, s) : m;
+    };
+    Vehicle.prototype.recordTrail = function()
+    {
+        recordTrail.call(this);
+        topDownMode && (this.trail[0][1] = this.trail[0][1].scale(topDownCraftScale));
+    };
     freeCamPos = vec3();
     freeCamRot = vec3();
     mouseDelta = vec3();
     localStorage.SP13KDEV && devSet(1); // a reload stays in dev mode
     localStorage.SP13KMENU && (menuMode = 1); // the menu() command: open on the menu
-    location.hash.startsWith('#wd') && debugWavedashMock(location.hash == '#wd2'); // before gameInit's wdInit (debugInit runs first)
+    // the Wavedash mock must exist before wdInit, which gameInit calls after this
+    location.hash.startsWith('#wd') && debugWavedashMock(location.hash == '#wd2');
 
-    // free cam mouse look, chained onto input.js's mouse steer handler (debugInit runs after
-    // inputInit; assigning onmousemove here used to be overwritten by it, which killed the look)
     onwheel = (e)=> topDownZoom *= e.deltaY > 0 ? 1.25 : .8; // the top-down view's zoom
-    const steerDown = onmousedown; // a click in the free cam takes the pointer back after Escape released it (a gesture, once)
+
+    // the free cam's handlers chain onto input.js's (debugInit runs after inputInit, which
+    // would otherwise overwrite them). A click in the free cam takes the pointer back after
+    // Escape released it (a lock needs a gesture)
+    const steerDown = onmousedown;
     onmousedown = (e)=> { steerDown(e); freeCamMode && !document.pointerLockElement && mainCanvas.requestPointerLock()?.catch(()=>0); };
     const steerMove = onmousemove;
     onmousemove = (e)=>
@@ -243,7 +296,8 @@ function debugInit()
   R      in race: restart
   N      skip a quarter lap, gates counted (poisons the run: no placing recorded)
   F G    free cam from play (WASD/QE, Shift = fast, mouse look)
-  T      top-down map view of the whole circuit (wheel zooms, WASD pans, [ ] browse)
+  T      top-down map view of the whole circuit (wheel zooms, WASD pans, X quarter turn,
+         [ ] browse to a warmed-up AI race with the circuit's name on top, for video)
   1 2    back / forward a quarter lap       3 4  hold: z -1000 / +1000 per frame
   5      map      0  save a screenshot
   Q      autodrive (testDrive)     V  spawn a racer     U  win sound
@@ -258,8 +312,8 @@ quick start is ${quickStart ? 'ON' : 'off'}, menu start is ${localStorage.SP13KM
 
 function debugUpdate()
 {
-    // every dev key needs dev mode (the dev() console command): the public page is this build, and a visitor pressing [ ]
-    // opened locked circuits, F or T turned dev mode on (2026-09-13, Frank)
+    // every dev key needs dev mode (the dev() console command): the public page is this
+    // build, and a visitor pressing [ ] would open locked circuits
     if (!devMode)
         return;
 
@@ -267,14 +321,20 @@ function debugUpdate()
     if (keyWasPressed('BracketLeft') || keyWasPressed('BracketRight'))
     {
         currentCircuit = mod(currentCircuit + (keyWasPressed('BracketRight')?1:-1), circuitCount);
-        titleScreenMode = 0;
+        titleScreenMode = topDownMode; // the map view browses the attract field, every craft on the AI
+        menuMode = 0;
         gameStart();
+        topDownMode && topDownWarmUp();
     }
+    if (topDownMode && keyWasPressed('KeyX')) // quarter turn, for a loop taller than it is wide
+        topDownRotate = !topDownRotate;
     if (keyWasPressed('KeyF') || keyWasPressed('KeyG')) // free cam straight from play
         toggleFreeCam();
     if (keyWasPressed('KeyT')) // top-down map view, from anywhere; the loop is fitted again each time it opens
         topDownMode = !topDownMode, topDownZoom = 1, topDownPan = vec3();
-    if (topDownMode && !freeCamMode) // pan a fiftieth of the loop radius a frame, scaled by the zoom
+
+    // pan a fiftieth of the loop radius a frame, scaled by the zoom
+    if (topDownMode && !freeCamMode)
         topDownPan = topDownPan.add(vec3(keyIsDown('KeyD')-keyIsDown('KeyA'),0,keyIsDown('KeyW')-keyIsDown('KeyS')).scale(trackMapRadius*.02*topDownZoom));
     if (freeCamMode)
     {
@@ -287,10 +347,10 @@ function debugUpdate()
         }
         if (!freeCamStarted)
         {
-            // just toggled on, or a reload: grab the pointer ONCE and start the free cam from
-            // wherever the game camera is right now. (Asking whenever the lock was not held asked
-            // every frame after Escape released it: Chrome refused with "too many pointer lock
-            // requests" and the pose snapped back each frame; a click asks again)
+            // just toggled on, or a reload: start the free cam from wherever the game camera
+            // is right now and ask for the pointer lock once. Never ask on every unlocked
+            // frame: after Escape releases the lock Chrome refuses with "too many pointer
+            // lock requests"; a click asks again (debugInit)
             freeCamStarted = 1;
             mainCanvas.requestPointerLock()?.catch(()=>0); // a reload has no gesture yet: the next click locks
             freeCamPos = cameraPos.copy();
@@ -306,7 +366,7 @@ function debugUpdate()
             keyIsDown('KeyE') - keyIsDown('KeyQ'),
             keyIsDown('KeyW') - keyIsDown('KeyS'));
 
-        const moveSpeed = keyIsDown('ShiftLeft') ? 500 : 100; // units per frame
+        const moveSpeed = (keyIsDown('ShiftLeft') ? 500 : 100)*freeCamStep; // units per fixed step
         const turnSpeed = 2; // radians per window-width of mouse travel
         const moveDirection = input.rotateX(freeCamRot.x).rotateY(-freeCamRot.y);
         freeCamPos = freeCamPos.add(moveDirection.scale(moveSpeed));
@@ -333,10 +393,40 @@ function debugUpdate()
         testDrive = !testDrive
     if (keyWasPressed('KeyU'))
         sound_win.play();
-    if (debug && keyWasPressed('KeyV')) // an extra rival just behind the player, random grid slot
+    if (debug && keyWasPressed('KeyV')) // an extra rival just behind the player, a random rival colour
         vehicles.push(new Racer(playerVehicle.s-1300, 0, randInt(fieldSize-1)))
-    //if (!document.hasFocus())
-    //    testDrive = 1;
+}
+
+// the map view's circuit change, for capturing video: the attract field from a random spot
+// on the loop, then 20 to 50 s of racing run at once, so it opens on a race in progress with
+// the field spread out. Math.random: the shared generator belongs to the world and the music
+function topDownWarmUp()
+{
+    const s = Math.random()*4e5;
+    for (let i = 0; i < vehicles.length; ++i)
+        vehicles[i].place(s+i*750, slotX(i));
+    for (let n = 1200+Math.random()*1800|0; n--;)
+        time = frame++/frameRate, updateCars();
+}
+
+// the map view's orthographic half height: the loop's box fitted to the window's shape (a
+// 16:9 frame fits a wide loop closer than a square one), with room for the name on top
+function topDownHeight(aspect)
+{
+    const half = k => (Math.max(...trackMapPts.map(p=>p[k]))-Math.min(...trackMapPts.map(p=>p[k])))/2;
+    const w = half(topDownRotate?1:0), h = half(topDownRotate?0:1);
+    return max(h/.86, w/aspect)*1.2; // glPreRender draws the view .14 down, under the name
+}
+
+// the free cam under a pause (game.js): the fixed steps are skipped, so the dev keys and the
+// camera run once a drawn frame here, the fly speed scaled to the frame's share of a step
+// so it matches the running game on any display rate
+function debugPausedUpdate(ms)
+{
+    freeCamStep = clamp(ms*frameRate/1e3, 0, 3);
+    debugUpdate();
+    updateCamera();
+    freeCamStep = 1;
 }
 
 function toggleFreeCam()
@@ -361,7 +451,9 @@ function debugDraw()
         return;
 
     // fps / vertices / draw calls / craft count, hidden from screenshots
-    if (debugInfo && !debugCapture)
+    if (topDownMode) // the map view shows only the circuit's name, in its colour
+        drawHUDText(levelInfo.name, .5,.1,.08, bandColor());
+    else if (debugInfo && !debugCapture)
         drawHUDText((averageFPS|0) + 'fps / ' + glBatchCountTotal + ' / ' + glDrawCalls + ' / ' + vehicles.length, .98,.16,.03, WHITE, 'right');
 
     const c = mainCanvas;

@@ -8,17 +8,19 @@
 // Entry point: buildSkeleton(corners, N), called by trackGen.js once per circuit
 // build. levels.js reads the SK_* flags at load, so this file must precede it.
 //
-// PURE on purpose: no engine globals, so test/skeleton-test.js can load this
+// Pure on purpose: no engine globals, so test/skeleton-test.js can load this
 // file on its own in node (it wraps the source in a Function and pulls out
 // buildSkeleton and the SK_* constants by name: keep those names and the
 // plain-script shape). A polygon closes by construction.
 //
 // corners: [x, z, radius, height, flags]; x/z/radius in kilo-units, height in
-// hundreds. Edge k leaves corner k. Wave/chicane/tunnel/cross flags describe
-// edge k; banked describes corner k's arc.
+// hundreds. Edge k leaves corner k. The wave, chicane, cross and arch flags
+// (with the arch styles BIG and DENSE) describe edge k; banked describes corner
+// k's arc.
 ////////////////////////////////////////////////////////////////////////////////
 
-const SK_WAVE=1, SK_CHICANE=2, SK_CROSS=8, SK_BANKED=16, SK_ARCH=32, SK_BIG=64, SK_DENSE=128; // (4 was TUNNEL, folded into ARCH+DENSE on 2026-09-13)
+// bit 4 is unused: a tunnel is ARCH+DENSE
+const SK_WAVE=1, SK_CHICANE=2, SK_CROSS=8, SK_BANKED=16, SK_ARCH=32, SK_BIG=64, SK_DENSE=128;
 
 function buildSkeleton(corners, N)
 {
@@ -108,7 +110,7 @@ function buildSkeleton(corners, N)
         const dx=Sx-T2x, dz=Sz-T2z;
         const L=Math.hypot(dx,dz), steps=Math.ceil(L/25);
         // Lateral sine on flagged straights: [periods, amplitude, start, span] of the
-        // edge. The (1-cos) envelope keeps position AND heading continuous at both ends.
+        // edge. The (1-cos) envelope keeps position and heading continuous at both ends.
         // A chicane is one period squeezed into the middle 40%, so it bites.
         // Amplitude grows with the straight squared (curvature ~ A/L^2), so a wave on a
         // short straight stays near a 25,000 radius and a chicane near 13,000.
@@ -138,6 +140,7 @@ function buildSkeleton(corners, N)
         cum[i+1]=cum[i]+Math.hypot(b.x-a.x,b.z-a.z);
     }
     const L=cum[M], step=L/N; // lap length and sample spacing, world units
+
     // s=0 sits well past corner 0's arc, so the grid (negative s) is on the start straight.
     const sStart=cum[arcEnd[0]]+8000;
     const sMid=arcEnd.map(i=>cum[i]); // distance at the end of each arc: the height keyframes
@@ -146,7 +149,7 @@ function buildSkeleton(corners, N)
         z:new Float64Array(N),
         heading:new Float64Array(N),
         turn:new Float64Array(N),
-        y:new Float64Array(N), // y and len, not height and length: DOM names are never mangled (MANGLE_PROPS)
+        y:new Float64Array(N), // y and len, not height and length: DOM names never mangle (MANGLE_PROPS)
         flags:new Int32Array(N),
         len:L
     };

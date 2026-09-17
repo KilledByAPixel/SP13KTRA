@@ -5,8 +5,7 @@
 //
 // Owns: scalar math helpers, Vector3, Color, the seeded Random generator and the
 // closed-loop index wrapper. Nothing here touches the game state except wrapSegment
-// (reads lapTrackSegments from game.js). (The Timer class went on 2026-09-13: the
-// countdown reads the clock gameStart zeroes and the results keep gameOverTime, game.js.)
+// (reads lapTrackSegments from game.js).
 //
 // Loads second, right after debug.js (or the release flags file), so ASSERT and
 // `debug` exist here but nothing else does yet: keep this file free of game
@@ -16,8 +15,8 @@
 //
 // Terser (toplevel: true) drops top-level helpers nothing references, so the
 // unused ones below cost nothing in the ZIP. It does NOT drop unused class
-// methods: every method on Vector3/Color/Random must earn its place (copy and mul went
-// on 2026-09-13; the dev build patches copy back on for the tests and the free cam).
+// methods: every method on Vector3/Color/Random must earn its place (the dev build
+// patches copy and the rotates onto Vector3 for the tests and the free cam, debug.js).
 
 ///////////////////////////////////////////////////////////////////////////////
 // Math Stuff
@@ -30,9 +29,10 @@ const sign = (value) => value < 0 ? -1 : 1; // sign(0) is 1, unlike Math.sign
 const mod = (dividend, divisor) => ((dividend % divisor) + divisor) % divisor; // always non-negative
 const clamp = (value, min=0, max=1) => value < min ? min : value > max ? max : value;
 const clampAngle = (value) => ((value+PI) % (2*PI) + 2*PI) % (2*PI) - PI; // wrap to -PI..PI
-const percent = (value, valueA, valueB) => (valueB-=valueA) ? clamp((value-valueA)/valueB) : 0; // 0..1 of value between A and B; 0 for an empty range
-const lerp = (percent, valueA, valueB) => valueA + clamp(percent) * (valueB-valueA); // percent FIRST, and clamped
-const rand = (valueA=1, valueB=0) => lerp(Math.random(), valueA, valueB); // unseeded: never use for world generation
+// 0..1 of value between A and B; 0 for an empty range
+const percent = (value, valueA, valueB) => (valueB-=valueA) ? clamp((value-valueA)/valueB) : 0;
+const lerp = (percent, valueA, valueB) => valueA + clamp(percent) * (valueB-valueA); // percent first, clamped
+const rand = (valueA=1, valueB=0) => lerp(Math.random(), valueA, valueB); // unseeded: never for the world
 const randInt = (valueA, valueB=0) => rand(valueA, valueB)|0;
 const smoothStep = (p) => p * p * (3 - 2 * p);
 
@@ -48,11 +48,11 @@ function buildMatrix(pos, rot, scale)
     return m;
 }
 
-
-// A DOMMatrix's twelve affine components as plain numbers, and a point through them. transformPoint allocates a DOMPoint per call and
-// crosses into the browser's matrix code: building a world was a fifth of its time in there (2026-09-15, local/world-hash-probe.js).
-// The components are read ONCE per matrix and many points pushed through them (Mesh.combine); the arithmetic is transformPoint's own,
-// with no perspective divide, which it does not do either, so the output is identical
+// a DOMMatrix's twelve affine components as plain numbers, and a point through them.
+// transformPoint allocates a DOMPoint per call and crosses into the browser's matrix code,
+// which is slow over a whole world build. The components are read once per matrix and many
+// points pushed through them (Mesh.combine); the arithmetic is transformPoint's own (no
+// perspective divide either), so the output is identical
 const matrixFloats = m => [m.m11, m.m12, m.m13, m.m21, m.m22, m.m23, m.m31, m.m32, m.m33, m.m41, m.m42, m.m43];
 const matrixApply = (f, x, y, z) => vec3(f[0]*x + f[3]*y + f[6]*z + f[9], f[1]*x + f[4]*y + f[7]*z + f[10], f[2]*x + f[5]*y + f[8]*z + f[11]);
 
@@ -76,7 +76,8 @@ function noise1D(x)
 // vector except addSelf; lerp uses addSelf on its own temporary, so it is safe
 // too. Methods that take a vector assert its type in the dev build.
 
-const vec3 = (x, y, z)=> y == undefined ? new Vector3(x, x, x) : new Vector3(x, y, z); // vec3(s) = (s,s,s); vec3(x,y) = (x,y,0); vec3() = (0,0,0)
+// vec3(s) = (s,s,s); vec3(x,y) = (x,y,0); vec3() = (0,0,0)
+const vec3 = (x, y, z)=> y == undefined ? new Vector3(x, x, x) : new Vector3(x, y, z);
 const isVector3 = (v) => v instanceof Vector3;
 const isNumber = (value) => typeof value === 'number';
 const ASSERT_VEC3 = (v) => ASSERT(isVector3(v));
@@ -96,17 +97,19 @@ class Vector3
     scale(s) { ASSERT(isNumber(s)); return vec3(this.x * s, this.y * s, this.z * s); }
     dot(v) { return this.x*v.x+this.y*v.y+this.z*v.z; }
     mag() { return (this.x**2 + this.y**2 + this.z**2)**.5; }
-    normalize() { const l = this.mag(); return l ? this.scale(1/l) : vec3(1); } // a zero vector normalizes to (1,1,1), not NaN
+    // a zero vector normalizes to (1,1,1), not NaN
+    normalize() { const l = this.mag(); return l ? this.scale(1/l) : vec3(1); }
     cross(v) { ASSERT_VEC3(v); return vec3(this.y*v.z-this.z*v.y, this.z*v.x-this.x*v.z, this.x*v.y-this.y*v.x); }
-    lerp(v, p) { ASSERT_VEC3(v); return v.subtract(this).scale(p).addSelf(this); }
-    // no rotateX/rotateY here: the shipped game only turned constant vectors, now written
-    // out. the free cam's rotates live in debug.js (debugVectorMethods patches them onto
-    // the prototype in the dev build only)
+    lerp(v, p) { ASSERT_VEC3(v); return v.subtract(this).scale(p).addSelf(this); } // p is not clamped
+
+    // no rotateX/rotateY here: the free cam's rotates live in debug.js (debugVectorMethods
+    // patches them onto the prototype in the dev build only)
     transform(matrix)
     {
         // full affine transform (translation included): points, not directions.
-        // draw.js transforms normals with a rotation-only matrix for that reason
-        if (enhancedMode) // the 13k build keeps transformPoint: the plain arithmetic is faster but cost 76 zip bytes there (2026-09-15)
+        // draw.js transforms normals with a rotation-only matrix for that reason.
+        // the 13k build keeps transformPoint: the plain arithmetic is faster but bigger
+        if (enhancedMode)
             return matrixApply(matrixFloats(matrix), this.x, this.y, this.z);
         const p = matrix.transformPoint(this);
         return vec3(p.x, p.y, p.z);
@@ -172,8 +175,9 @@ class Color
 //
 // Seeded xorshift32. The world is deterministic because trackGen seeds the
 // shared `random` (game.js) from trackSeed+circuit and then every generator
-// draws from it in a fixed order: the CONSUMPTION ORDER IS THE LAYOUT. Adding
+// draws from it in a fixed order: the consumption order is the layout. Adding
 // or removing a draw anywhere upstream moves every piece of scenery after it.
+// (musicBakeSteps reseeds the same generator, after the world build.)
 
 class Random
 {
@@ -181,7 +185,8 @@ class Random
     setSeed(seed)
     {
         this.seed = seed+1|0; // +1 so seed 0 is not the xorshift fixed point (0 never leaves 0)
-        this.float();this.float();this.float();// warmup: shake off the low-entropy first states of a small seed
+        // warmup: shake off the low-entropy first states of a small seed
+        this.float();this.float();this.float();
     }
     float(a=1, b=0) // a random float in b..a (a alone: 0..a), like rand()
     {
@@ -192,7 +197,7 @@ class Random
         return b + (a-b) * Math.abs(this.seed % 1e9) / 1e9; // slightly biased low by float error
     }
     int(a, b)         { return this.float(a, b)|0; }
-    sign()            { return this.float() < .5 ? -1 : 1; } // one float() per call: the consumption order is the layout
+    sign()            { return this.float() < .5 ? -1 : 1; } // one float() per call, for the consumption order
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -202,6 +207,5 @@ class Random
 // through wrapSegment. The starting grid sits at negative s, before the start
 // line, so wrapping must handle negatives correctly.
 
-const wrapSegment = (i) => mod(Math.floor(i), lapTrackSegments); // floor, not |0: negative s (the grid) must not alias
-// (wrapDeltaZ, the shortest signed route distance between two s values, went on 2026-09-13:
-// nothing called it once placing moved to raceDistance. Terser had already dropped it)
+// floor, not |0: negative s (the grid) must not alias
+const wrapSegment = (i) => mod(Math.floor(i), lapTrackSegments);

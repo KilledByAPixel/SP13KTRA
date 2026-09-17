@@ -13,12 +13,13 @@
 // vehicle.js and debug.js call sound_x.play(volume, pitch); vehicle.js keeps the
 // engine's returned source node to loop it and bend its playbackRate with speed;
 // music.js renders its instruments through Sound and plays its baked loop through
-// playSamples. The M key (game.js) mutes by zeroing soundVolume.
+// playSamples. The M key (game.js) mutes the music only; soundVolume 0 silences
+// everything, the music and the engine loop included.
 
 ///////////////////////////////////////////////////////////////////////////////
 // Audio settings
 
-let soundVolume = .3; // master gain (M toggled it 0/.3 until 2026-09-13; M toggles the music now, game.js)
+let soundVolume = .3; // master gain
 
 ///////////////////////////////////////////////////////////////////////////////
 // Sound
@@ -35,7 +36,8 @@ class Sound
     // returns the AudioBufferSourceNode so a caller can loop/stop/retune it (the engine)
     play(volume=1, pitch=1)
     {
-        const playbackRate = pitch*(1 + this.randomness*(Math.random()*2-1)); // +-randomness as a fraction of the pitch
+        // +-randomness as a fraction of the pitch
+        const playbackRate = pitch*(1 + this.randomness*(Math.random()*2-1));
         return playSamples(this.samples, volume, playbackRate);
     }
 }
@@ -45,12 +47,14 @@ class Sound
 
 let audioContext; // created on the first play, which browsers only allow after a gesture
 
-function playSamples(samples, volume, rate, offset) // offset: seconds into the samples to start from (the music loop joins in progress)
+// play a sample array once; returns the source node, or nothing when it cannot play now.
+// offset: seconds into the samples to start from (the music loop joins in progress)
+function playSamples(samples, volume, rate, offset)
 {
     if (!audioContext)
         audioContext = new AudioContext;
 
-    // nothing plays unfocused: sounds carried on in a background window
+    // nothing plays unfocused, or sounds carry on in a background window
     if (!document.hasFocus())
         return;
 
@@ -78,7 +82,7 @@ function playSamples(samples, volume, rate, offset) // offset: seconds into the 
     source.connect(gainNode);
 
     source.start(0, offset);
-    enhancedMode && (source.volumeNode = gainNode); // the enhanced build fades the music out through it (musicFade)
+    enhancedMode && (source.volumeNode = gainNode); // the enhanced build fades the music through it (musicFade)
     return source;
 }
 
@@ -106,7 +110,8 @@ function zzfxG
     // init parameters: convert Hz and seconds into per-sample radians and counts
     let PI2 = PI*2, sampleRate = zzfxR,
         startSlide = slide *= 500 * PI2 / sampleRate / sampleRate,
-        startFrequency = frequency = frequency * PI2 / sampleRate + (pitchJump *= PI2 / sampleRate), // the first jump, on the first sample
+        // the first pitch jump lands on the first sample
+        startFrequency = frequency = frequency * PI2 / sampleRate + (pitchJump *= PI2 / sampleRate),
         b = [], t = 0, i = 0, r = 0, c = 0, s = 0, f, length;
 
     // scale by sample rate
@@ -118,17 +123,19 @@ function zzfxG
     deltaSlide *= 500 * PI2 / sampleRate**3;
     repeatTime = repeatTime * sampleRate | 0;
 
-    ASSERT(shape != 3); // sin (0), triangle (1) and saw (2, the music's bass and lead) ship; tan does not
+    ASSERT(shape != 3); // sin (0), triangle (1) and saw (2, the music's bass and lead) ship; tan (3) does not
 
     // generate waveform, one sample per pass; b[i] = s * volume
     for(length = attack + decay + sustain + release + delay | 0;
         i < length; b[i++] = s * volume)
     {
-        if (!(++c%(bitCrush*100|0)))                   // bit crush: hold the sample for bitCrush*100 passes
+        if (!(++c%(bitCrush*100|0))) // bit crush: hold the sample for bitCrush*100 passes
         {
-            s = shape>1 ? 1-(2*t/PI2%2+2)%2 : shape ? 1-4*abs(Math.round(t/PI2)-t/PI2) : Math.sin(t); // saw, triangle, sine
+            // saw, triangle, sine
+            s = shape>1 ? 1-(2*t/PI2%2+2)%2 : shape ? 1-4*abs(Math.round(t/PI2)-t/PI2) : Math.sin(t);
 
-            // envelope: attack ramp, decay to sustainVolume, sustain, release ramp, silence under the delay tail
+            // envelope: attack ramp, decay to sustainVolume, sustain, release ramp, then
+            // silence under the delay tail
             s = sign(s)*(abs(s)**shapeCurve) *
                 (i < attack ? i/attack :                 // attack
                 i < attack + decay ?                     // decay
@@ -150,7 +157,8 @@ function zzfxG
         f = frequency += slide += deltaSlide;
         t += f + f*noise*Math.sin(i**5);
 
-        if (repeatTime && !(++r % repeatTime))  // repeat: restart the pitch envelope every repeatTime, one jump higher
+        // repeat: restart the pitch envelope every repeatTime, one jump higher
+        if (repeatTime && !(++r % repeatTime))
         {
             frequency = startFrequency += pitchJump;
             slide = startSlide;

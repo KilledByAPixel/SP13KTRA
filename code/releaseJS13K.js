@@ -2,10 +2,14 @@
 
 const debug = 0;
 const enhancedMode = 0;
-const wavedashMode = 0; // no Wavedash hooks: wavedash.js is not in the 13k build and the two call sites fold away
-const newgroundsMode = 0; // no Newgrounds hooks either: newgrounds.js is not in the 13k build
+
+// no platform hooks: wavedash.js and newgrounds.js are not in the 13k build and their
+// call sites fold away
+const wavedashMode = 0;
+const newgroundsMode = 0;
 let debugInfo, debugMesh, devMode;
-// build flags live HERE, first in the concat order: terser folds a const only into
+
+// build flags live here, first in the concat order: terser folds a const only into
 // reads that FOLLOW its declaration, so a flag declared in game.js stays live in
 // every file before it (input.js, vehicle.js) and ships the branches it guards
 const clampAspectRatios = 0;

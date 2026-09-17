@@ -6,9 +6,9 @@ SP13KTRA by Frank Force
 An anti-gravity grand prix in 13 kilobytes, made for js13kGames
 
 Controls
-- Arrows or Mouse = Drive (a click enters mouse mode: the pointer's offset from the
-  window centre steers, the left button drives, right boosts;
-  Left/Right return to the keys)
+- Arrows or W/A/D = Drive
+- Mouse = a click enters mouse mode: the pointer's offset from the window centre
+  steers, the left button drives, right boosts; the gas key returns to the keys
 - Space or the middle button = Brake
 - Left Shift = Boost (costs energy)
 - Escape = Title screen
@@ -21,8 +21,8 @@ Features
 - Seven AI rivals driving the same vehicle simulation as the player
 - Fixed-step physics with substeps, containment and craft contacts
 - Energy, boost pads and the recharge strip
-- ZzFX sounds and a techno loop baked at load
-- Persistent save data (circuit, last place, craft colour, best placing per circuit)
+- ZzFX sounds and a techno loop per circuit, baked from its seed
+- Persistent save data (circuit, craft colour, best placing and time per circuit)
 - All written from scratch in vanilla JS
 
 This file is the entry point: it is the last script in the concat order and only

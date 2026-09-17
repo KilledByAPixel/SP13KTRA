@@ -3,27 +3,31 @@
 ///////////////////////////////////////////////////////////////////////////////
 // input.js - keyboard, mouse and (dev/enhanced only) gamepad
 //
-// Owns the raw input state: a per-key bit field (inputData), the mouse steer
-// axis and button bits, and the gamepad arrays. Nothing here knows about the
-// game; it only records what the player is pressing.
+// Owns the raw input state: a per-key bit field (inputData), the mouse steer axis and
+// button bits, and the gamepad arrays. Nothing here knows about the game; it only records
+// what the player is pressing.
 //
 // Entry points: inputInit() installs the window handlers (game.js gameInit, before
-// debugInit, which chains the free cam's mouse look onto onmousemove),
-// inputUpdate() runs at the top of every frame and inputUpdatePost() at the
-// bottom (game.js gameUpdate, both the paused and running paths).
+// debugInit, which chains the free cam's mouse look onto onmousemove); inputUpdate() runs
+// at the top of every frame and inputUpdatePost() at the bottom (game.js gameUpdate, both
+// the paused and running paths).
 //
-// Readers: keyIsDown/keyWasPressed in game.js (title, menu, pause, dev keys) and
-// vehicle.js (player controls, mouseX/mouseButtons, gamepadStick); hud.js reads
-// mouseX/mouseY for the menu rows; debug.js reads keys for the dev tools; the
-// smoke tests poke inputData/mouseX directly.
+// Readers: keyIsDown/keyWasPressed in game.js (title, menu, pause, dev keys) and vehicle.js
+// (player controls, mouseX/mouseButtons, gamepadStick); hud.js reads mouseX/mouseY for the
+// menu rows; debug.js reads keys for the dev tools; the smoke tests poke inputData/mouseX
+// directly.
 //
-// Keyboard and mouse everywhere; gamepad in the dev and enhanced builds only (gamepadsEnable
-// is enhancedMode, a const 0 in the 13k build, so terser folds every gamepad path away).
-// Mouse: a click enters mouse mode, in which the pointer steers by how far it sits from
-// the centre of the window whether or not a button is held; the left button drives,
-// right boosts, a click starts. Any key returns to keyboard mode.
-// Touch (dev and enhanced builds): the on-screen touch gamepad in touch.js fills pad 0 in a race;
-// elsewhere a tap is a click. The menu's own touch design is still to come.
+// Mouse: a click enters mouse mode, in which the pointer steers by how far it sits from the
+// centre of the window whether or not a button is held; left drives, right is the turbo,
+// middle brakes. vehicle.js ends mouse mode, where the race reads the controls: on the gas
+// key, and in the enhanced build on any arrow or WASD. Space and Shift keep it, so a mouse
+// player brakes and boosts from the keyboard.
+// Gamepad: dev and enhanced builds only (gamepadsEnable is enhancedMode, a const 0 in the
+// 13k build, so terser folds every gamepad path away).
+// Touch (dev and enhanced builds): the on-screen pad in touch.js fills pad 0 in a race;
+// elsewhere a tap is a click.
+///////////////////////////////////////////////////////////////////////////////
+
 const gamepadsEnable = enhancedMode;
 const inputWASDEmulateDirection = enhancedMode; // WASD doubles as the arrows (folded out of the 13k build)
 
@@ -31,12 +35,13 @@ const inputWASDEmulateDirection = enhancedMode; // WASD doubles as the arrows (f
 // Input user functions
 //
 // inputData[code] bits: 1 = held, 2 = pressed this frame, 4 = released this frame.
-// keyIsDown returns the raw bit (0/1); the pressed/released tests return 1/0.
+// keyIsDown returns the raw bit (0/1); keyWasPressed returns 1/0.
 
 const keyIsDown      = (key) => inputData[key] & 1;
 const keyWasPressed  = (key) => inputData[key] & 2 ? 1 : 0;
 
-let isUsingGamepad; // enhanced build only; every read is `enhancedMode && isUsingGamepad` so the release folds it
+// enhanced build only; every read is `enhancedMode && isUsingGamepad` so the release folds it
+let isUsingGamepad;
 const gamepadIsDown      = (key, gamepad=0) => !!(gamepadData[gamepad][key] & 1);
 const gamepadWasPressed  = (key, gamepad=0) => !!(gamepadData[gamepad][key] & 2);
 const gamepadStick       = (stick, gamepad=0) => // dead-zoned vec3, y up; zero when nothing is plugged in
@@ -46,9 +51,11 @@ const gamepadStick       = (stick, gamepad=0) => // dead-zoned vec3, y up; zero 
 // Input event handlers
 
 let inputData = []; // what keys are down, by e.code
-// mouseX -1..1 across the window, mouseY 0..1 down it (the menu's rows); mouseButtons a bit
-// per held button (1 left, 2 middle, 4 right); mousePressed: left pressed this frame;
-// mouseMode: a click sets it, any key clears it
+
+// mouseX: -1..1 across the window; mouseY: 0..1 down it (the menu's rows)
+// mouseButtons: a bit per held button (1 left, 2 middle, 4 right)
+// mousePressed: left pressed this frame
+// mouseMode: a click sets it, vehicle.js clears it (the gas key; enhanced: any arrow or WASD)
 let mouseX = 0, mouseY = 0, mouseButtons = 0, mousePressed = 0, mouseMode = 0;
 
 function inputInit()
@@ -65,12 +72,12 @@ function inputInit()
     onkeydown = (e)=>
     {
         enhancedMode && (isUsingGamepad = 0); // any key press hands control back to the keyboard
-        // (mouse mode ends on the gas key, where the race reads it: vehicle.js. Any key ended it here for a day, Space too, so a mouse player braking on Space lost the mouse steer, Frank 2026-09-14)
+
+        // mouse mode does not end here: Space and Shift must keep it (vehicle.js decides).
         // consume printable keys: Firefox otherwise opens find-as-you-type on WASD, and the
         // page would scroll on space. Ctrl combinations and F-keys stay with the browser.
-        // The ARROWS too in the enhanced build (Frank, 2026-09-16: they scrolled the Newgrounds page under the game): every
-        // enhanced build runs framed in somebody's page (Newgrounds, Wavedash, the GitHub page), and wdInit used to guard
-        // this for Wavedash alone. It folds out of the 13k build, whose own page has nothing to scroll
+        // The arrows too in the enhanced build, which runs framed in somebody's page and
+        // would scroll it; that folds out of the 13k build, whose own page has nothing to scroll
         (e.key.length < 2 || enhancedMode && e.key.startsWith('Arrow')) && !e.ctrlKey && e.preventDefault();
         if (!e.repeat) // auto-repeat must not re-fire "pressed"
         {
@@ -82,19 +89,29 @@ function inputInit()
 
     onkeyup = (e)=>
     {
-        inputData[e.code] = inputData[e.code]&2|4; // released (the held bit drops with it), keeping a press from this same step: a tap
-        // whose down and up both landed before the next step read as never pressed (a quick Space or Escape on a slow frame; 2026-09-13)
+        // released (the held bit drops with it), keeping a press from this same step: a tap
+        // whose down and up both land before the next step would read as never pressed
+        inputData[e.code] = inputData[e.code]&2|4;
         if (inputWASDEmulateDirection)
             inputData[remapKey(e.code)] = inputData[remapKey(e.code)]&2|4;
     }
 
-    onmousemove = (e)=> (mouseX = e.clientX/innerWidth*2-1, mouseY = e.clientY/innerHeight); // vehicle.js scales x by 3 and clamps: full lock a third of the way out
-    onmousedown = (e)=> { enhancedMode && e.isTrusted && (isUsingGamepad = 0); e.button && e.preventDefault(); mouseButtons |= 1<<e.button; mouseMode = 1; e.button || (mousePressed = 1); }; // a real click takes control back from the gamepad, as a key does (Frank, 2026-09-15: only a key did, so after the pad the mouse could not steer); isTrusted: touch.js forwards a touch off its pad through here, and that must leave the pad in control // preventDefault: a middle click no longer starts the browser's autoscroll (the middle button brakes) // any click: the pointer steers from now on, button or not
+    // vehicle.js scales x by 3 and clamps: full lock a third of the way out
+    onmousemove = (e)=> (mouseX = e.clientX/innerWidth*2-1, mouseY = e.clientY/innerHeight);
+
+    // any click enters mouse mode: the pointer steers from now on, button or not.
+    // a real click takes control back from the gamepad, as a key does; isTrusted: touch.js
+    // forwards a touch off its pad through here, and that must leave the pad in control.
+    // preventDefault for the middle and right buttons only: no autoscroll on the middle
+    // click (it brakes), while a left click still focuses a framed game
+    onmousedown = (e)=> { enhancedMode && e.isTrusted && (isUsingGamepad = 0); e.button && e.preventDefault(); mouseButtons |= 1<<e.button; mouseMode = 1; e.button || (mousePressed = 1); };
     onmouseup = (e)=> mouseButtons &= ~(1<<e.button);
-    oncontextmenu = (e)=> e.preventDefault(); // the right button is the boost
-    // losing focus stops the engine loop at once: a hidden tab gets no animation frames, so the
-    // per-frame focus check in updateVehicles never ran and the loop played on
-    onblur = ()=> { engineSound && (engineSound.stop(), engineSound = 0); musicStop(); inputData = [], mouseButtons = 0; }; // held input drops too: the loop stops here, so inputUpdate's focus check never ran and a key held while switching away stayed held (the enhanced build only until the post-deadline fix, +7 in the 13k build). A 13k focus pause here (paused = 1, and onfocus clearing it) worked and went for size, +19
+    oncontextmenu = (e)=> e.preventDefault(); // the right button is the turbo
+
+    // losing focus stops the engine loop and the music at once and drops held input: a
+    // hidden tab gets no animation frames, so inputUpdate's focus check never runs, the
+    // loop would play on and a key held while switching away would stay held
+    onblur = ()=> { engineSound && (engineSound.stop(), engineSound = 0); musicStop(); inputData = [], mouseButtons = 0; };
 
     // WASD to the arrows
     const remapKey = (c) => inputWASDEmulateDirection ?
@@ -122,7 +139,7 @@ function inputUpdatePost()
 ///////////////////////////////////////////////////////////////////////////////
 // gamepad input (dev and enhanced builds)
 
-// one entry per pad index
+// one entry per pad index: button bits (as inputData), sticks, analog button values 0..1
 let gamepadData, gamepadStickData, gamepadDataValues;
 
 // polled every frame by inputUpdate

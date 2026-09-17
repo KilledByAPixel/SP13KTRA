@@ -54,7 +54,7 @@ function glInit()
     document.body.appendChild(glCanvas = document.createElement('canvas'));
     glContext = glCanvas.getContext('webgl2', {alpha:false});
 
-    // THE shader. The two GLSL strings below are what ships; this block is the
+    // The shader. The two GLSL strings below are what ships; this block is the
     // readable version.
     //
     // Attributes (locations 0,1,2 bound by glCreateProgram):
@@ -62,8 +62,9 @@ function glInit()
     //
     // Vertex uniforms:
     //   m = projection * inverse(camera)  (glPreRender)      o = object matrix (glDraw)
-    //   l = key light direction (xyz), l.w 1 inverts the lit term (abs(l.w-N.l): UMBRA)   g = light colour, BLACK when
-    //   a = ambient colour, WHITE when lighting is off           lighting is off
+    //   l = key light direction (xyz); l.w 1 inverts the lit term, abs(l.w-N.l) (UMBRA)
+    //   g = light colour, BLACK when lighting is off
+    //   a = ambient colour, WHITE when lighting is off
     //   q = the draw's tint: multiplies colour and alpha
     //   u = (glSpecularity, glEmissive, !glEnableFog, stored ? 0 : 1): u.w picks the
     //       uniform material u.y + 2*u.z over the vertex's own p.w / n.w. `stored`
@@ -76,12 +77,13 @@ function glInit()
     //   when SPECTRUM (fully emissive). k = (local x + z) * .002 is the position phase.
     //   C = colour, times a moving cosine rainbow when SPECTRUM: phase = time + .2*k
     //       + .004*height + (0,2,4) per channel, so height weighs ten times x+z.
-    //   d = lit colour: C * q * (ambient + light * max(0, N.l)), or one minus that when l.w is 1, lerped to plain C*q by
-    //       E, then PULSE (U) flashes it toward white by .35+.35*sin(9*time + k), a wave
-    //       travelling along position. d.a = c.a * q.a. k and the SPECTRUM height use the
-    //       LOCAL vertex position p, not w: every animated mesh is baked in world space
-    //       except the finale's sky, which is drawn at the camera, and with w its rainbow
-    //       slid with every camera move and flashed at speed.
+    //   d = lit colour: C * q * (ambient + light * max(0, N.l)), the lit term one minus
+    //       itself when l.w is 1, lerped to plain C*q by E, then PULSE (U) flashes it
+    //       toward white by .35+.35*sin(9*time + k), a wave travelling along position.
+    //       d.a = c.a * q.a. k and the SPECTRUM height use the local vertex position p,
+    //       not w: every animated mesh is baked in world space except the finale's sky,
+    //       which is drawn at the camera, and with w its rainbow would slide with every
+    //       camera move and flash at speed.
     //   r = the reflected light vector + specularity (vertex n.w or uniform u.x)
     //   y = camera-to-vertex vector + the nofog flag     z = clip w = camera-forward distance
     //   N is the normal through the object matrix's inverse transpose (uniform scale
@@ -117,7 +119,11 @@ function glInit()
     glVertexData = new Float32Array(gl_MAX_BATCH*12);
 
     glSetAdditive(0); // blending itself follows the depth mask: glSetDepthTest
-    glContext.enable(gl_DEPTH_TEST); // always on: the sky draws first after the depth clear, well inside the far plane, and writes no depth
+
+    // always on: the sky draws first after the depth clear, well inside the far plane, and
+    // writes no depth
+    glContext.enable(gl_DEPTH_TEST);
+
     // no back-face culling: the road is seen from below where it twists away, so everything
     // is double sided. Winding hides nothing; lighting uses the explicit normals, so a back
     // face simply reads unlit
@@ -135,7 +141,8 @@ function glCreateProgram(vs,fs)
             throw Error(glContext.getShaderInfoLog(shader));
         glContext.attachShader(program,shader);
     }
-    ['p','n','c'].map((s,i)=>glContext.bindAttribLocation(program,i,s)); // fixed locations so glBind needs no lookups
+    // fixed locations so glBind needs no lookups
+    ['p','n','c'].map((s,i)=>glContext.bindAttribLocation(program,i,s));
     glContext.linkProgram(program);
     if (debug && !glContext.getProgramParameter(program,35714)) // LINK_STATUS
         throw Error(glContext.getProgramInfoLog(program));
@@ -178,13 +185,17 @@ function glPreRender(size)
     const f=1.45-.25*boostFov, near=30, far=400000;
     let projection=new DOMMatrix([f*size.y/size.x,0,0,0, 0,f,0,0,
         0,0,(far+near)/(far-near),1, 0,0,-2*far*near/(far-near),0]);
-    if(topDownMode) // the dev map view (debug.js): orthographic, 1.3 loop radii tall times the wheel zoom,
-    {              // depth linear over a million units. clip w is 1, so the fog term is nil: no fog, no z-fighting
-        const h=trackMapRadius*1.3*topDownZoom;
-        projection=new DOMMatrix([size.y/size.x/h,0,0,0, 0,1/h,0,0, 0,0,2e-6,0, 0,0,-1,1]);
+    // the dev map view (debug.js): orthographic, the loop fitted to the window times the
+    // wheel zoom, depth linear over a million units. clip w is 1, so the fog term is nil:
+    // no fog, no z-fighting
+    if(topDownMode)
+    {
+        const h=topDownHeight(size.x/size.y)*topDownZoom;
+        projection=new DOMMatrix([size.y/size.x/h,0,0,0, 0,1/h,0,0, 0,0,2e-6,0, 0,-.14,-1,1]); // .14 down: the name's room on top
     }
+    // the roll last, so about the camera's own view axis (one argument: rotateSelf turns about Z)
     glContext.uniformMatrix4fv(glUniform('m'),false,
-        projection.multiply(buildMatrix(cameraPos,cameraRot).rotateSelf(cameraRoll).inverse()).toFloat32Array()); // the roll last, so about the camera's own view axis (one argument: rotateSelf turns about Z)
+        projection.multiply(buildMatrix(cameraPos,cameraRot).rotateSelf(cameraRoll).inverse()).toFloat32Array());
     glContext.uniform4f(glUniform('e'),cameraPos.x,cameraPos.y,cameraPos.z,time);
 }
 
@@ -210,7 +221,7 @@ function glDraw(buffer,count,transform,color,stored)
 ///////////////////////////////////////////////////////////////////////////////
 // The stream: glPush -> glVertexData -> glRender, or captured by glBake
 
-// flush the pending stream vertices as one strip (identity matrix unless given).
+// flush the pending stream vertices as one strip, in world space (identity matrix).
 // Mesh.render calls this before its own draw so stream and static draws keep their order
 function glRender()
 {
@@ -246,7 +257,7 @@ function glBake(draw)
 function glSetAdditive(on) { glContext.blendFunc(gl_SRC_ALPHA,on?1:gl_ONE_MINUS_SRC_ALPHA); }
 
 // blending is on exactly when the pass does not write depth (sky, trails):
-// blended opaque draws left hairline cracks between road chunks on some GPUs, where two
+// blended opaque draws leave hairline cracks between road chunks on some GPUs, where two
 // triangles' shared edge each part-covers a pixel and the background blends through; an
 // opaque write simply overwrites. The road, scenery and hulls are alpha 1 anyway (the .9
 // wall rail becomes solid, which is fine)
@@ -264,7 +275,7 @@ const vectorOne=vec3(0,1); // the normal given to vertices that have none (unlit
 // append one shape to the stream as part of the frame's single triangle strip.
 // `points` is already in strip order; `color` is one Color for all or an array per point;
 // `normals` may be 0 (unlit: sky, glow, trails).
-// PARITY: the list is pushed in REVERSE (winding = front face after the flip), wrapped in
+// PARITY: the list is pushed in reverse (winding = front face after the flip), wrapped in
 // degenerate caps: a repeat of the last point before and of the first point after, which
 // join the shape to its neighbours in the strip with zero-area triangles. That adds 2, so
 // an even point count stays even and nothing later in the batch flips its facing
@@ -283,8 +294,9 @@ function glPush(points,normals,color)
 function glPushVert(p,n,c)
 {
     const m=glEmissive+2*!glEnableFog;
-    // the enhanced build writes the twelve floats out: a world build pushes hundreds of thousands of vertices and the temporary array
-    // per vertex was pure garbage (2026-09-15). The 13k build keeps the short form, 45 zip bytes cheaper, and folds this away
+    // the enhanced build writes the twelve floats out: a world build pushes hundreds of
+    // thousands of vertices and a temporary array per vertex is pure garbage. The 13k build
+    // keeps the short form, which is smaller, and folds this branch away
     if(enhancedMode)
     {
         if(glCapture) glCapture.push(p.x,p.y,p.z,m,n.x,n.y,n.z,glSpecularity,c.r,c.g,c.b,c.a);

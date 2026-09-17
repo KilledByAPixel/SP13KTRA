@@ -6,11 +6,11 @@
 // Owns:
 //   - the shared persistent meshes: cubeMesh, prismMesh, canopyMesh, the craft hulls
 //     (craftSpecs[i].mesh, one per colour index) and the two baked glow fans (glowMeshes)
-//   - buildLoft, the ONE shape builder (every hull and kit piece is a loft)
+//   - buildLoft, the one shape builder (every hull and kit piece is a loft)
 //   - class Mesh: a static vertex buffer with upload/render/dispose and combine (welding)
 //   - the immediate-mode push that feeds the stream or a bake: pushGlow (the sky bands push
-//     their own corners in track.js: pushGradient and pushSprite went on 2026-09-13)
-//   - fullscreen helpers
+//     their own corners in track.js)
+//   - getAspect and the fullscreen helpers
 //
 // Entry points and who calls them:
 //   drawInit()          game.js, once after glInit
@@ -20,8 +20,9 @@
 //   Mesh.dispose        track.js (switching seed/circuit)
 //   pushGlow            track.js (nozzle glows, bursts, charge sparks, the sky kit's discs
 //                       during a bake)
-//   getAspect           hud.js
-//   isFullscreen/toggleFullscreen  game.js
+//   getAspect           hud.js, help.js, debug.js
+//   isFullscreen        hud.js (fullscreenOffer)
+//   toggleFullscreen    game.js (enhanced only: the menu's FULL SCREEN row and the F key)
 //
 // Loads after utilities.js (vec3, rgb, buildMatrix, lerp) and webgl.js (glPush,
 // glDraw, glRender, glBake, glBind). Everything is in world units; there are no textures.
@@ -54,8 +55,8 @@ function drawInit()
         canopyMesh = buildLoft([[1,0,.08,0], [.2,1,1,0], [-1,.62,.62,0]]);
     }
 
-    // one hull per racer colour (racerColors, vehicle.js makeCraftSpec), uploaded on its first render
-    // like the cube and the canopy (Mesh.render uploads lazily): black is 6, white is 7
+    // one hull per racer colour (racerColors, vehicle.js makeCraftSpec), uploaded on its first
+    // render like the cube and the canopy (Mesh.render uploads lazily): black is 6, white is 7
     craftSpecs=racerColors.map((_,i)=>makeCraftSpec(i));
 
     // bake the two glow fans (soft rim and flat disc) at unit size, so pushGlow outside
@@ -71,7 +72,7 @@ function drawInit()
 // station = [z, halfWidth, topY, bottomY, sideHeight=.5] in craft units, nose +z, ordered
 // nose first; the section points are (left, top, right, bottom) with the sides at
 // sideHeight between bottom (0) and top (1): .5 is the hull's diamond, 0 a triangle.
-// WINDING: the section is wound CLOCKWISE seen from +z and each quad is pushed as
+// Winding: the section is wound clockwise seen from +z and each quad is pushed as
 // [a,a,b,d,c,c] (a,b = the front station's edge, c,d = the same edge one station back),
 // which glPush's reversal turns into front-facing triangles; the boundary cycles
 // a->b->c->d->a for quad()'s normal. 6 verts per quad keeps the batch's strip parity.
@@ -130,8 +131,9 @@ class Mesh
             for(let i=0;i<this.points.length;++i)
             {
                 const p=this.points[i], n=this.normals[i], c=this.colors[i]||WHITE, j=i*12;
-                // enhanced: the twelve floats written out, no array per vertex (glPushVert does the same); the specularity slot stays the
-                // zero a fresh Float32Array already holds. The 13k build keeps the short form and folds this away
+                // enhanced: the twelve floats written out, no array per vertex (glPushVert does
+                // the same); the specularity slot stays the zero a fresh Float32Array already
+                // holds. The 13k build keeps the short form, which is smaller, and folds this away
                 if(enhancedMode)
                     data[j]=p.x, data[j+1]=p.y, data[j+2]=p.z, data[j+3]=this.mats[i]||0, data[j+4]=n.x, data[j+5]=n.y, data[j+6]=n.z, data[j+8]=c.r, data[j+9]=c.g, data[j+10]=c.b, data[j+11]=c.a;
                 else
@@ -173,10 +175,12 @@ class Mesh
     combine(mesh, pos, rot, scale, color=WHITE, mat=0)
     {
         const m = buildMatrix(pos, rot, scale);
-        const m2 = buildMatrix(0, rot); // normals only turn: the kit's faces are axis aligned or near enough
-        // the matrices' components read once, then every vertex through plain arithmetic: transformPoint allocated a DOMPoint each, a
-        // tenth of a world build (2026-09-15, local/world-hash-probe.js: 627 ms to 558 ms, every circuit's world hash identical).
-        // Pushing in a loop instead of map+spread drops a temporary array per piece too. The 13k build keeps the old path, 76 bytes cheaper
+        const m2 = buildMatrix(0, rot); // normals only turn: no inverse scale
+
+        // enhanced: the matrices' components read once, then every vertex through plain
+        // arithmetic (transformPoint allocates a DOMPoint each, a tenth of a world build), and
+        // a push loop instead of map+spread drops a temporary array per piece. The output is
+        // bit-identical. The 13k build keeps the transformPoint path, which is smaller
         if (enhancedMode)
         {
             const f = matrixFloats(m), f2 = matrixFloats(m2);
@@ -199,12 +203,12 @@ class Mesh
 
 // a triangle fan: a hot centre fading out to a transparent rim (soft), or a flat disc
 // (soft=0). it stands in camera XY, which for a round glow is close enough to camera facing.
-// The rim runs CLOCKWISE on purpose: glPush pushes the list in REVERSE, so this is the
+// The rim runs clockwise on purpose: glPush pushes the list in reverse, so this is the
 // order that comes out front facing, the same rule the road quads and the trail ribbon
-// follow. Back-face culling is off, so winding no longer hides anything; the rule is kept
-// so the geometry stays consistent.
+// follow. Back-face culling is off, so winding hides nothing; the rule is kept so the
+// geometry stays consistent.
 // rot: the fan's facing, the camera's unless a caller (the sky kit) gives its own.
-// size is the disc's diameter; flat squashes its height while baking (the sky kit's oval clouds).
+// size is the disc's diameter; flat squashes its height while baking (the sky kit's clouds).
 function pushGlow(pos, size, color, soft=1, sides=8, rot=cameraRot, flat=1)
 {
     // outside a bake, draw the baked unit fan scaled up: one draw, no stream vertices
@@ -214,12 +218,11 @@ function pushGlow(pos, size, color, soft=1, sides=8, rot=cameraRot, flat=1)
 
     const rim = soft ? rgb(color.r, color.g, color.b, 0) : color;
 
-    // the whole frame is ONE triangle strip, and a strip flips winding on every odd
-    // triangle: push an ODD number of verts and everything drawn after this in the batch
-    // comes out back facing (with culling on, that ate the sun's scanline bands). the fan
-    // is 2*sides+3 verts, so it opens on a doubled first rim point to make the count even.
-    // the duplicate is at the FRONT: at the back it would swap two verts of every real
-    // triangle
+    // the whole batch is one triangle strip, and a strip flips winding on every odd
+    // triangle: push an odd number of verts and everything drawn after this in the batch
+    // comes out back facing. the fan is 2*sides+3 verts, so it opens on a doubled first rim
+    // point to make the count even. the duplicate is at the front: at the back it would swap
+    // two verts of every real triangle
     const points = [], colors = [];
     for(let i=0; i<=sides; ++i)
     {
@@ -253,5 +256,5 @@ function toggleFullscreen()
     else if (element.webkitRequestFullscreen)
         element.webkitRequestFullscreen();
     else if (element.mozRequestFullScreen)
-      element.mozRequestFullScreen();
+        element.mozRequestFullScreen();
 }
