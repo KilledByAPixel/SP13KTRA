@@ -1,10 +1,8 @@
-# 🦄🌈 SP13KTRA
+# 🌈🚀 SP13KTRA
 
 *Full Spectrum Racing.*
 
 Race eight anti-gravity craft across eight spectral circuits in real 3D. Every circuit has its own colour, theme, and procedural soundtrack.
-
-Created by Frank Force for JS13k 2026
 
 Created by Frank Force for JS13k 2026
 
