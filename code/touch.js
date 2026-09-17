@@ -22,16 +22,20 @@
 //   GAS big in the bottom right corner, TURBO above it, pause top centre
 //   BRAKE left of GAS on a wide window, tucked beside TURBO on a tall one (on a thin
 //     portrait window the wide layout's BRAKE sits over the steer)
-//   steering is a floating horizontal line, not a stick (only left and right count): a
-//     press anywhere on the left half that is not a button re-centres the line under the
-//     thumb, and the thumb's sideways offset steers, full lock at the line's end.
-//     Released, the line rests bottom left to show where it lives
+//   steering is a horizontal line bottom left, not a stick (only left and right count): a
+//     press anywhere on the left half that is not a button takes it, and the thumb's
+//     sideways offset from the line's centre steers, full lock at the line's end. The line
+//     stays put wherever the thumb lands. With touchSteerFloat it floats instead: a press
+//     re-centres it under the thumb, and released it rests bottom left
 //
 // build.js's MANGLE_PROPS applies to the enhanced build: never call a built-in method whose
 // name is on its list here (a Map's get ships renamed and throws).
 ///////////////////////////////////////////////////////////////////////////////
 
 const touchDevice = window.ontouchstart !== undefined;
+
+// 0: the steer line is fixed bottom left. 1: it re-centres under each new thumb
+const touchSteerFloat = 0;
 
 // the touch() dev command: the pad without a touch screen, driven by the mouse
 let touchForce = debug && localStorage.SP13KTOUCH|0;
@@ -160,7 +164,10 @@ function touchLayout(W, H)
         {button:9, x:W/2-S*1.3, y:H*.72, r:S*.55, label:'RESUME'},
         {button:8, x:W/2+S*1.3, y:H*.72, r:S*.55, label:'TITLE'},
     ] : [
-        {stick:1, x:S*1.4, y:H-S*1.4, r:S*.8}, // the steer line's rest; r is half its length
+        // the steer line; r is half its length. Fixed, it is longer: a thumb never lands dead
+        // centre on a control that does not come to it (less so on a tall window, where a
+        // full-length line crowds BRAKE), level with GAS's centre so both thumbs sit even
+        touchSteerFloat ? {stick:1, x:S*1.4, y:H-S*1.4, r:S*.8} : {stick:1, x:S*(tall ? 1.25 : 1.5), y:H-S*1.1, r:S*(tall ? .85 : 1)},
         {button:0, x:W-S*1.1, y:H-S*1.1, r:S*.7, label:'GAS'},
         {button:2, x:W-S*(tall ? 2.35 : 2.7), y:H-S*(tall ? 2.35 : .8), r:S*.5, label:'BRAKE'},
         // lower on a wide window: at 2.7 it overlaps the minimap under the lap
@@ -234,8 +241,9 @@ function touchHit(p)
     return hit || p.x < innerWidth/2 && touchControls.find(c => c.stick);
 }
 
-// the thumb's sideways offset from where it landed, full lock at the line's end
-const touchApplyStick = (c, p)=> touchStick = vec3(clamp((p.x - c.ax)/c.r, -1, 1), 0);
+// the thumb's sideways offset from the line's centre (floating: from where it landed), full
+// lock at the line's end
+const touchApplyStick = (c, p)=> touchStick = vec3(clamp((p.x - (c.ax || c.x))/c.r, -1, 1), 0);
 
 function touchDown(e)
 {
@@ -250,7 +258,11 @@ function touchDown(e)
         return;
     touchRoles[e.pointerId] = c;
     if (c.stick)
-        c.ax = p.x, c.ay = p.y, touchApplyStick(c, p); // the line re-centres under the thumb
+    {
+        if (touchSteerFloat)
+            c.ax = p.x, c.ay = p.y; // the line re-centres under the thumb
+        touchApplyStick(c, p);
+    }
     else
         touchButtons[c.button] = 1;
 }
