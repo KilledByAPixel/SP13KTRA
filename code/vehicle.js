@@ -533,12 +533,20 @@ function updateCars()
             // keys ramp the steer over about a fifth of a second both ways (a digital lock
             // was too twitchy); the mouse below is direct
             keySteer=lerp(keySteerEase,keySteer,(keyIsDown('ArrowRight')|keyIsDown('KeyD'))-(keyIsDown('ArrowLeft')|keyIsDown('KeyA'))); // W, A and D beside the arrows in every build (2026-09-13: reading the keys here is far smaller than the enhanced build's remap in the 13k build, +63)
-            c={steer:keySteer,gas:keyIsDown('ArrowUp')|keyIsDown('KeyW'),brake:keyIsDown('Space'),boost:keyIsDown('ShiftLeft')}; // Space brakes, left Shift is the turbo (Down and Space until 2026-09-13: Down cannot be held with the steer keys, Frank)
+            // Space brakes, left Shift is the turbo (Down and Space until 2026-09-13: Down cannot be held with the steer keys, Frank);
+            // the enhanced build brakes on Down and S too (Frank, 2026-09-16: WASD and the arrows are a full set), written as a
+            // conditional so the 13k build folds to Space alone
+            c={steer:keySteer,gas:keyIsDown('ArrowUp')|keyIsDown('KeyW'),brake:enhancedMode?keyIsDown('Space')|keyIsDown('ArrowDown')|keyIsDown('KeyS'):keyIsDown('Space'),boost:keyIsDown('ShiftLeft')};
             // the gas key hands steering back to the keys, before the mouse steer applies (the post-deadline fixes: a click to
             // race from the menu left the pointer parked over the list, steering full left off the grid; any key did it in
             // input.js for a day, so Space ended mouse mode and a mouse player could not brake on it, Frank 2026-09-14; the gas
             // and steer keys priced 6 over, and a keyboard player always gasses to go)
             mouseMode &= !c.gas;
+            // the enhanced build hands it back on ANY of the arrows or WASD (Frank, 2026-09-16: a Newgrounds player was "softlocked
+            // into mouse control" steering with the arrows, since a click turned mouse mode on and only the gas key ended it);
+            // Space and Shift still keep it, so a mouse player brakes and boosts from the keyboard
+            if(enhancedMode && (keyIsDown('ArrowLeft')|keyIsDown('ArrowRight')|keyIsDown('ArrowDown')|keyIsDown('KeyA')|keyIsDown('KeyD')|keyIsDown('KeyS')))
+                mouseMode=0;
             // mouse mode (a click enters it, the gas key leaves it): the pointer steers
             // by its distance from centre even with no button held (full lock a third of the
             // way out); left drives, right is the turbo, middle brakes (a plain slow-down since the drift went on 2026-09-13;
