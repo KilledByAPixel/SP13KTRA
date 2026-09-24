@@ -48,6 +48,7 @@ class Sound
 let audioContext; // created on the first play, which browsers only allow after a gesture
 
 // play a sample array once; returns the source node, or nothing when it cannot play now.
+// samples: one array, or [left, right] for the stereo music loop (stereoMusic, music.js).
 // offset: seconds into the samples to start from (the music loop joins in progress)
 function playSamples(samples, volume, rate, offset)
 {
@@ -66,10 +67,13 @@ function playSamples(samples, volume, rate, offset)
         return;
     }
 
-    const buffer = audioContext.createBuffer(1, samples.length, zzfxR),
+    // stereo: a pair of arrays (a sample is a number, with no length)
+    const stereo = stereoMusic && samples[0].length,
+         buffer = audioContext.createBuffer(stereo ? 2 : 1, stereo || samples.length, zzfxR),
          source = audioContext.createBufferSource();
 
-    buffer.getChannelData(0).set(samples);
+    stereo ? (buffer.getChannelData(0).set(samples[0]), buffer.getChannelData(1).set(samples[1]))
+        : buffer.getChannelData(0).set(samples);
     source.buffer = buffer;
     source.playbackRate.value = rate;
 
@@ -78,7 +82,7 @@ function playSamples(samples, volume, rate, offset)
     gainNode.gain.value = soundVolume*volume;
     gainNode.connect(audioContext.destination);
 
-    // no stereo panner: the game is mono
+    // no stereo panner: the sounds are mono, only the stereo music loop has two channels
     source.connect(gainNode);
 
     source.start(0, offset);
@@ -129,7 +133,11 @@ function zzfxG
     for(length = attack + decay + sustain + release + delay | 0;
         i < length; b[i++] = s * volume)
     {
-        if (!(++c%(bitCrush*100|0))) // bit crush: hold the sample for bitCrush*100 passes
+        // bit crush: hold the sample for bitCrush*100 passes. With bitCrush 0 the modulo is
+        // `c%0`, NaN, and `!NaN` is true, so no crush means every sample passes: correct here,
+        // and load-bearing, but it is undefined behaviour in any other language (the Dreamcast
+        // port had to special-case it, 2026-09-20)
+        if (!(++c%(bitCrush*100|0)))
         {
             // saw, triangle, sine
             s = shape>1 ? 1-(2*t/PI2%2+2)%2 : shape ? 1-4*abs(Math.round(t/PI2)-t/PI2) : Math.sin(t);

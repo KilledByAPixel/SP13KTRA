@@ -42,20 +42,24 @@ function buildTrack()
 
     ////////////////////////////////////////////////////////////////////////////
     // Skeleton: the authored corner polygon. Every circuit is preset, nothing is rerolled.
-    let corners=circuitCorners[currentCircuit];
+    const corners=circuitCorners[currentCircuit];
+
+    const sk=buildSkeleton(corners,N);
 
     // SODIUM and CHERENKOV run the other way in the enhanced build, so not every circuit
-    // turns the same way. The corner polygon is mirrored in x about its own centre, not
-    // about zero, so the loop keeps its footprint and the map draws it in the same place.
-    // Every corner reverses and everything derived follows (turn signs, the racing line,
-    // chevron sides, and pads and strips, which land in new spots). The 13k build's
-    // circuits never change: this folds away there
+    // turns the same way. The sampled loop is mirrored in x about its own centre (Math.min:
+    // the game's min takes two values, and a spread over the corners once mirrored about
+    // x=0, putting the loop a whole width to the left), so its footprint and the map stay
+    // put while the start straight moves to the other side. Every corner reverses and
+    // everything derived follows (turn signs, the racing line, chevron sides, and pads and
+    // strips, which land in new spots). The 13k build's circuits never change: this folds
+    // away there
     if(enhancedMode && (currentCircuit==2 || currentCircuit==4))
     {
-        const xs=corners.map(c=>c[0]), twiceCentre=min(...xs)+max(...xs);
-        corners=corners.map(c=>[twiceCentre-c[0],...c.slice(1)]);
+        const twiceCentre=Math.min(...sk.x)+Math.max(...sk.x);
+        for(let i=0;i<N;++i)
+            sk.x[i]=twiceCentre-sk.x[i], sk.heading[i]=-sk.heading[i], sk.turn[i]=-sk.turn[i];
     }
-    const sk=buildSkeleton(corners,N);
     routeScale=sk.len/lapDistance;
     debug && LOG('lap',sk.len|0,'units, spacing',(sk.len/N).toFixed(1));
     trackHeadingCum=new Float64Array(N+1);

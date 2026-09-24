@@ -17,6 +17,17 @@
 // each phrase and opens fully into the drop on beat 112, then an echo, a pump off every
 // beat and tanh into the full mix.
 //
+// STEREO (the build flag stereoMusic: off in the 13k build, the Dreamcast export and the
+// seed tools): the same notes, a little separation. It is baked as MID AND SIDE: the mono
+// stems are untouched and are the mid, and two side stems take only the panned parts at
+// their pan p (a part at p is (1-p) of itself on the left and (1+p) on the right, so the
+// mid is exactly the mono mix). Kick, snare and bass stay centred; the hat sits .3 right,
+// the lead's two detuned voices .5 each side, the pad's root .4 left and fifth .4 right.
+// The side runs through the same lowpass (its own state), pump and echo, the echo's
+// feedback negated, which is a ping-pong: each repeat of a panned part flips sides. Then
+// left and right are tanh(mid -+ side) to first order, tanh(mid) -+ side*(1-tanh(mid)^2),
+// levelled on their mid. The bake returns [left, right] instead of one array.
+//
 // Never a live scheduler: baking makes timing sample exact with no lookahead code.
 // Nothing wraps past the loop's end (a typed array drops the write), or the last bar
 // would leak into the intro. Cost: a 2.7M-float buffer and about half a second per bake.
@@ -134,7 +145,8 @@ function* musicBakeSteps(seed)
     const lead  = new Sound([V[0]*LG,,,.01,V[3],.08,V[1],V[2],,,,,,,,,,.6,.05]);
     yield;
 
-    const beat = zzfxR*60/bpm|0, L = beat*128, mix = new Float32Array(L), m = new Float32Array(L);
+    const beat = zzfxR*60/bpm|0, L = beat*128, mix = new Float32Array(L), m = new Float32Array(L),
+        mixS = stereoMusic && new Float32Array(L), mS = stereoMusic && new Float32Array(L); // the side stems (stereo)
     let at;
 
     // one hit at `at`, semi semitones up, at gain g, into one stem (mix: drums, m: melodic)
@@ -162,10 +174,10 @@ function* musicBakeSteps(seed)
         yield; // a slice every sixteenth (a bar's slice was too long: it can hold pad notes)
         brk || b<F[0] || G[0]&bit && hit(mix, musicKick, K, DG);
         brk || b<F[1] || G[1]&bit && hit(mix, snare, K, DG);
-        b>=F[2] && (brk ? b>105 && t&1 : hatBits&bit) && hit(mix, hat, K, DG);
+        b>=F[2] && (brk ? b>105 && t&1 : hatBits&bit) && (hit(mix, hat, K, DG), stereoMusic && hit(mixS, hat, K, DG*.3));
         bassBits&bit && b>=F[3] && b<96 && hit(m, bass, r-12*((b&7)==7)+BM*scale[b%4]);
-        leadBits&bit && leadPhrases>>(b>>5)&1 && b<123 && (hit(m, lead, n), hit(m, lead, n+.12));
-        P && !(t%64) && (hit(m, musicPad, r), hit(m, musicPad, r+7));
+        leadBits&bit && leadPhrases>>(b>>5)&1 && b<123 && (hit(m, lead, n), hit(m, lead, n+.12), stereoMusic && (hit(mS, lead, n, -.5), hit(mS, lead, n+.12, .5)));
+        P && !(t%64) && (hit(m, musicPad, r), hit(m, musicPad, r+7), stereoMusic && (hit(mS, musicPad, r, -.4), hit(mS, musicPad, r+7, .4)));
     }
 
     // the post pass over the melodic stem: a resonant lowpass (Chamberlin state variable,
@@ -176,6 +188,7 @@ function* musicBakeSteps(seed)
     // end of the buffer is still dry when the start is processed); then a pump off every beat;
     // then into the full mix through tanh
     const d = beat*3/4>>E;
+    let loS = 0, baS = 0; // the side's filter state (stereo)
     for (let i = 0, lo = 0, ba = 0, hi; i < L; ++i)
     {
         const p = i/beat, ramp = p < 96 ? p%32/32 : min(1, (p-96)/16);
@@ -186,13 +199,34 @@ function* musicBakeSteps(seed)
         // (a cut to zero at the beat clicks on any pattern still sounding there)
         m[i] *= min(min(1, i%beat/2205), (beat-i%beat)/441);
         mix[i] = Math.tanh(mix[i] + m[i]);
+        if (stereoMusic)
+        {
+            // the side: the same filter on its own state, the echo's feedback negated (the
+            // ping-pong) and the same pump; then through the tanh's slope where the mid sits,
+            // tanh(mid -+ side) to first order: one tanh a sample, not two (the side is 11 to
+            // 38 dB under the mid), and a centred side is exactly the mono loop
+            hi = mS[i] - loS - .4*baS; baS += f*hi; loS += f*baS;
+            mS[i] = (loS - (i<d ? 0 : mS[i-d])*.35) * min(min(1, i%beat/2205), (beat-i%beat)/441); // (a shared const survived the 13k fold)
+            const s = (mixS[i] + mS[i])*(1 - mix[i]*mix[i]);
+            mixS[i] = mix[i] + s; // right
+            mix[i] -= s;          // left
+        }
         i&32767 || (yield); // a slice every 32,768 samples
     }
 
     // the level: every loop scaled to the original's RMS (.14), the boost capped at 2.5, so
     // a sparse loop is not 12 dB under a busy one
+    // a stereo loop is measured on its mid and both channels take the one gain, so it keeps
+    // the mono loop's loudness
     let e = 0, n = 0;
-    for (const x of mix)
+    if (stereoMusic)
+        for (let i = 0; i < L; ++i)
+        {
+            const x = (mix[i] + mixS[i])/2;
+            e += x*x;
+            i&131071 || (yield); // (the 13k build strips every yield line whole: nothing else may be on it)
+        }
+    else for (const x of mix)
     {
         e += x*x;
         ++n&131071 || (yield); // sliced too: in one piece it took 55-70 ms
@@ -201,9 +235,10 @@ function* musicBakeSteps(seed)
     for (let i = L; i--;)
     {
         mix[i] *= e;
+        stereoMusic && (mixS[i] *= e);
         i&131071 || (yield);
     }
-    return mix;
+    return stereoMusic ? [mix, mixS] : mix; // stereo: [left, right]
 }
 
 // the enhanced build's circuit change: the loop fades out over .25 s and stops (a cut
@@ -247,6 +282,6 @@ function musicUpdate()
             }
         }
     if (!soundVolume || musicMuted) return musicStop(); // musicMuted: the M key (game.js)
-    if (!musicSource && (!enhancedMode || musicLoop) && (musicSource = playSamples(musicLoop, 1, 1, musicEpoch ? (audioContext.currentTime-musicEpoch)%(musicLoop.length/zzfxR) : 0)))
+    if (!musicSource && (!enhancedMode || musicLoop) && (musicSource = playSamples(musicLoop, 1, 1, musicEpoch ? (audioContext.currentTime-musicEpoch)%((stereoMusic ? musicLoop[0] : musicLoop).length/zzfxR) : 0)))
         musicSource.loop = 1, musicEpoch ||= audioContext.currentTime;
 }

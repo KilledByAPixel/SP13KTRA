@@ -183,6 +183,6 @@ function wdMerge(cloud)
     return [localChanged, cloudBehind];
 }
 
-// this device's bests as the cloud file's bytes
-const wdEncode = () => new TextEncoder().encode(JSON.stringify({places: bestPlaces,
-    times: Array.from({length: circuitCount}, (_, c) => +bestTimes[c] || 0)}));
+// this device's bests as the cloud file's JSON (newgrounds.js stores the same text), and as its bytes
+const wdJSON = () => JSON.stringify({places: bestPlaces, times: Array.from({length: circuitCount}, (_, c) => +bestTimes[c] || 0)});
+const wdEncode = () => new TextEncoder().encode(wdJSON());

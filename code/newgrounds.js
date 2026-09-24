@@ -1,17 +1,24 @@
 'use strict';
 
 ///////////////////////////////////////////////////////////////////////////////
-// newgrounds.js - Newgrounds: medals and a scoreboard per circuit
+// newgrounds.js - Newgrounds: medals, a scoreboard per circuit and a cloud save of the bests
 //
 // Loaded by the dev page and the enhanced build only, after wavedash.js, whose
 // achievementsEarned it shares, so the medals can never disagree with the Wavedash
 // achievements or the menu; the 13k build never concatenates it. Newgrounds plays the game
 // in an iframe whose address carries ngio_session_id for a logged-in player: anywhere else,
-// or without the key below, every hook does nothing. No cloud save: the bests stay in
-// localStorage.
+// or without the key below, every hook does nothing.
+//
+// The cloud save (ngSync) keeps the best place and time per circuit in the player's save
+// slot 1 as the JSON Wavedash's bests.json holds, merged Wavedash's way (wdMerge: the better
+// of local and cloud per circuit, so a device only gains, and no upload after a failed read).
+// It exists because the iframe's localStorage is third-party storage to the browser: Brave
+// wipes it when the last Newgrounds tab closes, so a player there lost every unlock between
+// sessions while the medals, server side, survived.
 //
 // Called from: game.js gameInit (ngInit), vehicle.js after a finish writes the save
-// (ngFinish) and when the player explodes in a race (ngExplode). Each call is written
+// (ngFinish, which also syncs the cloud save) and when the player explodes in a race
+// (ngExplode). Each call is written
 // `newgroundsMode && hook()` with no arguments, so the 13k build folds it away (as
 // wavedash.js).
 //
@@ -48,7 +55,11 @@ const ngSession = () => newgroundsMode && ngAppId && ngKey && (location.search.m
 const ngUnlocked = {};
 
 // ngReady: the medal list at start, so no unlock goes out before it is known
-let ngReady = Promise.resolve(), ngCryptoKey;
+// ngQueue: cloud syncs run one at a time (two would race on the slot)
+let ngReady = Promise.resolve(), ngQueue = Promise.resolve(), ngCryptoKey;
+
+// the cloud save's slot number (the project's API Tools give the app its slots)
+const ngSlot = 1;
 
 const ngWarn = (what, r) => console.warn('Newgrounds: ' + what + ' failed', r && r.message || r);
 
@@ -59,6 +70,28 @@ function ngInit()
     // a failed list unlocks everything earned
     ngReady = ngCall('Medal.getList').then(d => d && d.medals.map(m => m.unlocked && (ngUnlocked[m.id] = 1))).then(ngAchieve);
     setInterval(() => ngCall('Gateway.ping'), 6e4); // keeps the session alive, as the plugin does
+    ngSync();
+}
+
+// the cloud save: read slot ngSlot, merge it with this device's bests (the menu reads them
+// live, so a late download just lights it up), and write the slot when it lacks something.
+// An empty slot (no url) is empty bests; a failed read ends the sync, so a device that cannot
+// read the cloud never overwrites it
+function ngSync()
+{
+    if (!ngSession()) return;
+    ngQueue = ngQueue
+        .then(() => ngCall('CloudSave.loadSlot', {id: ngSlot}))
+        .then(d => d && (d.slot.url ? fetch(d.slot.url, {cache: 'no-store'}).then(r => r.text()).then(t => wdParse(new TextEncoder().encode(t))) : wdParse()))
+        .then(cloud =>
+        {
+            if (!cloud) return;
+            const [localChanged, cloudBehind] = wdMerge(cloud);
+            localChanged && (writeSaveData(), ngReady = ngReady.then(ngAchieve));
+            return cloudBehind && ngCall('CloudSave.setData', {id: ngSlot, data: wdJSON()})
+                .then(d => d && console.log('Newgrounds: cloud save written'));
+        })
+        .catch(e => ngWarn('cloud sync', e)); // localStorage stays the save: a failed call loses nothing
 }
 
 // a finish (never a death or a debug skip), called once the save holds the new bests
@@ -70,6 +103,7 @@ function ngFinish()
     board && ngCall('ScoreBoard.postScore', {id: board, value: score})
         .then(d => d && console.log('Newgrounds: track ' + (c+1) + ' score ' + score + ' ms posted'));
     ngReady = ngReady.then(ngAchieve);
+    ngSync();
 }
 
 // the player exploded in a race, as the race ends (vehicle.js): the secret Supernova

@@ -120,6 +120,8 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
             <label class=vol>Volume <input type=range id=vol min=0 max=1 step=.05 value=.5 oninput="gain&&(gain.gain.value=this.value)"></label>
             <label class=vol><input type=checkbox id=keep onchange="try{localStorage.musicBenchKeep=+this.checked}catch(e){}"> Keep place on switch</label>
             <label class=vol><input type=checkbox id=dj onchange="djToggle(this.checked)"> Auto DJ</label>
+            <label class=vol><input type=checkbox id=stereo checked onchange="setStereo(this.checked)"> Stereo</label>
+            <button onclick="saveWav()">Save WAV</button>
         </div>
     </div>
 
@@ -139,7 +141,8 @@ pre{color:#a7c9b0;white-space:pre-wrap;font-size:12px;background:#0a0910;border-
 <p id=stamp class=stamp></p>
 </main>
 
-<script>const debug = 1, enhancedMode = 0, ASSERT = () => 0; let currentCircuit = 0; const circuitCount = 8;</script>
+<script>const debug = 1, enhancedMode = 0, ASSERT = () => 0; let currentCircuit = 0; const circuitCount = 8;
+let stereoMusic = 1; // the Stereo box: music.js reads it at every bake</script>
 <script src=../code/utilities.js></script>
 <script src=../code/audio.js></script>
 <script src=../code/sounds.js></script>
@@ -157,11 +160,13 @@ const sections = [[0,'intro'],[32,'phrase 2'],[64,'phrase 3'],[96,'breakdown'],[
 // through a gain and an analyser (the spectrum beside the title)
 let ctx, gain, analyser, src, loop, seedNow = -1, startTime = 0;
 const beatSeconds = () => (zzfxR*60/musicInfo.bpm|0)/zzfxR;
-const loopSeconds = () => loop.length/zzfxR;
+// a loop is one array, or [left, right] when baked in stereo
+const channels = samples => samples[0].length ? samples : [samples];
+const loopSeconds = () => channels(loop)[0].length/zzfxR;
 function source(samples, when, offset)
 {
-    const b = ctx.createBuffer(1, samples.length, zzfxR), s = ctx.createBufferSource();
-    b.getChannelData(0).set(samples);
+    const c = channels(samples), b = ctx.createBuffer(c.length, c[0].length, zzfxR), s = ctx.createBufferSource();
+    c.forEach((x, k) => b.getChannelData(k).set(x));
     s.buffer = b; s.loop = true; s.connect(gain);
     s.start(when, offset);
     return s;
@@ -250,6 +255,34 @@ function load(seed, autoplay, randomHue)
     autoplay ? play(from) : paintGrid(-1);
 }
 const pick = seed => load(seed, 1);
+
+// the Stereo box: rebake the loop showing, in place if it is playing and Keep place is on
+function setStereo(on)
+{
+    stereoMusic = +on;
+    try { localStorage.musicBenchStereo = stereoMusic; } catch(e) {}
+    load(seedNow, !!src);
+}
+
+// Save WAV: the loop showing as a 16-bit WAV, one loop long, stereo or mono as baked
+// (clipped at 1, as the browser plays it)
+function saveWav()
+{
+    const c = channels(loop), n = c[0].length, k = c.length, data = new DataView(new ArrayBuffer(44 + n*k*2));
+    const text = (at, t) => [...t].forEach((ch, i) => data.setUint8(at+i, ch.charCodeAt()));
+    text(0, 'RIFF'); data.setUint32(4, 36 + n*k*2, 1); text(8, 'WAVEfmt ');
+    data.setUint32(16, 16, 1); data.setUint16(20, 1, 1); data.setUint16(22, k, 1);
+    data.setUint32(24, zzfxR, 1); data.setUint32(28, zzfxR*k*2, 1); data.setUint16(32, k*2, 1); data.setUint16(34, 16, 1);
+    text(36, 'data'); data.setUint32(40, n*k*2, 1);
+    for (let i = 0; i < n; ++i)
+        for (let j = 0; j < k; ++j)
+            data.setInt16(44 + (i*k + j)*2, Math.max(-1, Math.min(1, c[j][i]))*32767, 1);
+    const ci = musicSeeds.indexOf(seedNow), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], {type: 'audio/wav'}));
+    a.download = `sp13ktra-${ci >= 0 ? circuits[ci][0].toLowerCase()+'-' : ''}seed-${seedNow}${k > 1 ? '-stereo' : ''}.wav`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1e4);
+}
 
 // show the seed in musicInfo on the page
 function show(seed, randomHue)
@@ -364,7 +397,7 @@ onkeydown = e =>
     if (e.code == 'ArrowRight') pick(seedNow+1);
 };
 
-try { $('keep').checked = localStorage.musicBenchKeep == 1; } catch(e) {}
+try { $('keep').checked = localStorage.musicBenchKeep == 1; $('stereo').checked = stereoMusic = +(localStorage.musicBenchStereo != 0); } catch(e) {}
 load(musicSeeds[0]); // (no autoplay before a click)
 (function tick()
 {

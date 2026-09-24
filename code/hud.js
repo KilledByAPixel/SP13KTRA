@@ -94,10 +94,7 @@ function drawHUD()
     if (freeCamMode || topDownMode)
         return; // the dev free camera and map view show the world clean
 
-    // enhanced: the logo's and the subtitle's fades restart each time the main title appears
-    if (enhancedMode)
-        titleLogoStart = titleScreenMode && !menuMode ? titleLogoStart || performance.now() : 0;
-    titleLogoStart = 0; // the logo's fade is switched off for now (titleLogoWhite stays white)
+    // enhanced: the subtitle's fade restarts each time the main title appears
     if (enhancedMode)
         titleSubtitleStart = titleScreenMode && !menuMode ? titleSubtitleStart || performance.now() : 0;
     drawMap();
@@ -177,8 +174,13 @@ function drawHUD()
         {
             // FULL SPECTRUM RACING under the logo, centred like the whole word above it. It
             // waits 1.5 s after the title appears, then fades in over a second
-            const s = titleLogoSize();
-            drawHUDText('FULL SPECTRUM RACING', .5, titleLogoY + s*.42, s*.3, rgb(1, 1, 1, clamp((performance.now()-titleSubtitleStart)/1e3-1.5, 0, 1)));
+            const s = titleLogoSize(), titleFade = clamp((performance.now()-titleSubtitleStart)/1e3-1.5, 0, 1);
+            drawHUDText('FULL SPECTRUM RACING', .5, titleLogoY + s*.42, s*.3, rgb(1, 1, 1, titleFade));
+            // the credit, low on the title, fading in with the subtitle (Frank, 2026-09-22).
+            // ENHANCED BUILDS ONLY, this whole branch: the 13k jam entry is being voted on and
+            // never changes (its Terser output stays byte-identical, build-full says so)
+            // sized off the logo, like the subtitle, so a narrow window shrinks it too
+            drawHUDText('CREATED BY FRANK FORCE FOR JS13K 2026', .5, .94, s*.19, rgb(1, 1, 1, titleFade*.75));
         }
     }
     else
@@ -358,17 +360,14 @@ function drawLogo(x, y, s)
         g.addColorStop(i/8, hsl(i/8-time*.3, 1, .6));
     drawHUDText('13K', x,y + Math.sin(time)*s*.05, s/.9, g);
     const w = ctx.measureText('13K').width/2/W; // the font is still set from that call
-    drawHUDText('SP', x-w,y, s, enhancedMode ? titleLogoWhite() : WHITE, 'right');
-    drawHUDText('TRA', x+w,y, s, enhancedMode ? titleLogoWhite() : WHITE, 'left');
+    drawHUDText('SP', x-w,y, s, WHITE, 'right');
+    drawHUDText('TRA', x+w,y, s, WHITE, 'left');
 }
 
-// the enhanced title's fades (the 13k build folds both uses of titleLogoWhite to WHITE): SP
-// and TRA wait while 13K shows alone for a second, then fade in over a second, every time
-// the main title appears; the menu's corner logo is full white. Switched off for now: drawHUD
-// zeroes titleLogoStart every frame
-// titleLogoStart: performance.now() when the main title appeared, 0 while it is not showing
-// titleSubtitleStart: the same for FULL SPECTRUM RACING, which has its own fade (drawHUD)
-let titleLogoStart = 0;
+// the enhanced title's subtitle fade: performance.now() when the main title appeared, 0 while
+// it is not showing, so FULL SPECTRUM RACING fades in under the logo (drawHUD). The logo's own
+// fade, where SP and TRA waited a second while 13K showed alone and then faded in, is GONE
+// (Frank, 2026-09-19: he did not like it; it had been switched off in the code since 09-15)
 let titleSubtitleStart = 0;
 
 // the cover shot (enhanced only): 1 makes the main title's logo and subtitle span about 92%
@@ -378,7 +377,6 @@ const titleCover = 0;
 // the enhanced title's logo size: .15, less on a narrow window to stay clear of both edges
 const titleLogoSize = () => titleCover ? getAspect()*.13 : min(.15, getAspect()*.11);
 const titleLogoY = titleCover ? .3 : .2;
-const titleLogoWhite = () => titleLogoStart ? rgb(1, 1, 1, clamp((performance.now()-titleLogoStart)/1e3-1, 0, 1)) : WHITE;
 
 // every placing in the game (the race corner, the results card, the menu's BEST) through
 // one call, so they read the same: the numeral white and right-aligned at x, its ordinal

@@ -321,6 +321,12 @@ function drawScenery()
 // rainbow (the rainbow is reserved for recharge, the finale and the title)
 function drawTrails()
 {
+    // the ribbon is additive light, like the glows beside it: never fogged. Fog mixes RGB
+    // toward the horizon colour without touching alpha, so a fogged additive vertex ADDS
+    // the horizon colour at distance instead of fading out -- a far ribbon smeared the sky
+    // with its own band of horizon red. The baked glow fans carry their own nofog bit
+    // (drawInit), so only these pushed vertices needed it (Frank, 2026-09-19: both the same)
+    glEnableFog=0;
     for(const v of vehicles)
     {
         // the explosion: for 1.2 s after a death, six soft discs in the craft's colour around a
@@ -379,6 +385,7 @@ function drawTrails()
             pushGlow(p,100*idle+150*boost,WHITE,0);
         }
     }
+    glEnableFog=1; // back on for the next frame's hulls and canopy, which are not stored meshes
     glRender();
 }
 

@@ -7,6 +7,9 @@ const enhancedMode = 1;
 // newgrounds.js nothing outside a logged-in Newgrounds session
 const wavedashMode = 1;
 const newgroundsMode = 1;
+
+// the music baked in stereo (music.js)
+const stereoMusic = 1;
 let debugInfo, debugMesh, devMode;
 
 // build flags (see releaseJS13K.js: declared first so terser can fold them everywhere)

@@ -7,6 +7,9 @@ const enhancedMode = 0;
 // call sites fold away
 const wavedashMode = 0;
 const newgroundsMode = 0;
+
+// the music is baked mono (music.js): stereo doubles the bake's stems and costs bytes
+const stereoMusic = 0;
 let debugInfo, debugMesh, devMode;
 
 // build flags live here, first in the concat order: terser folds a const only into

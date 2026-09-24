@@ -22,10 +22,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const debug = 1;
-// all three are const 0 in releaseJS13K.js
+// all four are const 0 in releaseJS13K.js
 let enhancedMode = 1;   // the enhanced build: gamepad, WASD, aspect clamp
 let wavedashMode = 1;   // the wavedash.js hooks, idle without window.Wavedash
 let newgroundsMode = 1; // the newgrounds.js hooks, idle outside a logged-in Newgrounds session
+let stereoMusic = 1;    // the music baked in stereo (music.js); a let so the console can switch it before a bake
 let enableAsserts = 1;
 
 // the dev() console command toggles it; every dev key needs it, so a visitor to the public
