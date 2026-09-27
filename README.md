@@ -8,6 +8,7 @@ Created by Frank Force for JS13k 2026
 
 ## 🌈 [▶ Play SP13KTRA](https://killedbyapixel.github.io/SP13KTRA/)
 ## 🎶 [▶ SP13KTRA Music Bench](https://killedbyapixel.github.io/SP13KTRA/tools/music.html)
+## 💿 [▶ SP13KTRA for Dreamcast](https://github.com/KilledByAPixel/SP13KTRA/releases/latest)
 
 ![SP13KTRA](cover.jpg)
 
