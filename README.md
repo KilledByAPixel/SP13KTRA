@@ -7,8 +7,12 @@ Race eight anti-gravity craft across eight spectral circuits in real 3D. Every c
 Created by Frank Force for JS13k 2026
 
 ## 🌈 [▶ Play SP13KTRA](https://killedbyapixel.github.io/SP13KTRA/)
-## 🎶 [▶ SP13KTRA Music Bench](https://killedbyapixel.github.io/SP13KTRA/tools/music.html)
-## 💿 [▶ SP13KTRA for Dreamcast](https://github.com/KilledByAPixel/SP13KTRA/releases/latest)
+
+🎶 [SP13KTRA Music Bench](https://killedbyapixel.github.io/SP13KTRA/tools/music.html)
+
+💿 [SP13KTRA for Dreamcast](https://github.com/KilledByAPixel/SP13KTRA/releases/latest)
+
+🎬 [Watch the trailer](https://www.youtube.com/watch?v=lnD3-jk7ZsI)
 
 ![SP13KTRA](cover.jpg)
 
